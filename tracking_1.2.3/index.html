@@ -1,0 +1,1565 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Tracking · bensn.me</title>
+        <meta
+            name="description"
+            content="Habit Tracking — Konsum, Verbrauch, Gewohnheiten."
+        />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+            name="apple-mobile-web-app-status-bar-style"
+            content="black-translucent"
+        />
+        <meta name="apple-mobile-web-app-title" content="Tracking" />
+        <meta name="theme-color" content="#0a0a0b" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="/shared/bensn.css" />
+        <style>
+            body {
+                overscroll-behavior: none;
+            }
+
+            .app-wrap {
+                position: relative;
+                z-index: 1;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 0 1.25rem 4rem;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+            }
+
+            /* ── Tabs ── */
+            .tabs {
+                display: flex;
+                border-bottom: 1px solid var(--border);
+                margin-bottom: 1.25rem;
+            }
+            .tab {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: 0.1em;
+                padding: 9px 14px;
+                cursor: pointer;
+                color: var(--muted);
+                border: none;
+                border-bottom: 2px solid transparent;
+                margin-bottom: -1px;
+                background: none;
+                transition:
+                    color 0.15s,
+                    border-color 0.15s;
+            }
+            .tab.active {
+                color: var(--text);
+                border-bottom-color: var(--text);
+            }
+            .tab:hover:not(.active) {
+                color: var(--text);
+            }
+            .tab-section {
+                display: none;
+            }
+            .tab-section.visible {
+                display: block;
+            }
+
+            /* ── API Status Bar ── */
+            .api-bar {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.6rem 1rem;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                margin-bottom: 1rem;
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                color: var(--muted);
+            }
+            .api-bar .dot-sm {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                background: var(--muted);
+            }
+            .api-bar .dot-sm.ok {
+                background: var(--green);
+                animation: pulse 2s ease-in-out infinite;
+            }
+            .api-bar .dot-sm.err {
+                background: var(--accent-red);
+            }
+            .api-bar-right {
+                margin-left: auto;
+                color: rgba(255, 255, 255, 0.2);
+                cursor: pointer;
+                transition: color 0.15s;
+            }
+            .api-bar-right:hover {
+                color: var(--muted);
+            }
+
+            /* ── Category Group ── */
+            .cat-group {
+                margin-bottom: 1.5rem;
+            }
+            .cat-header {
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                margin-bottom: 0.75rem;
+            }
+            .cat-icon {
+                font-size: 14px;
+                line-height: 1;
+            }
+            .cat-title {
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                color: var(--muted);
+            }
+            .cat-today-total {
+                margin-left: auto;
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                color: var(--muted);
+            }
+
+            /* ── Item Card ── */
+            .item-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 1rem 1.25rem;
+                margin-bottom: 6px;
+                display: grid;
+                grid-template-columns: 1fr auto;
+                gap: 0.75rem;
+                align-items: center;
+                transition: border-color 0.15s;
+            }
+            .item-card:hover {
+                border-color: var(--border-hover);
+            }
+            .item-name {
+                font-family: "Syne", sans-serif;
+                font-size: 0.95rem;
+                font-weight: 700;
+                letter-spacing: -0.01em;
+                margin-bottom: 2px;
+            }
+            .item-meta {
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                color: var(--muted);
+            }
+
+            /* Bestand display */
+            .item-bestand {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                margin-top: 5px;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                flex-wrap: wrap;
+            }
+            .bestand-val {
+                color: var(--text);
+                font-weight: 500;
+            }
+            .bestand-label {
+                color: var(--muted);
+            }
+            .bestand-verbrauch {
+                color: var(--muted);
+                font-size: 10px;
+            }
+            .bestand-verbrauch.warn {
+                color: var(--orange);
+            }
+            .bestand-verbrauch.low {
+                color: var(--accent-red);
+            }
+
+            /* Zähler display */
+            .item-zaehler {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                margin-top: 5px;
+                color: var(--muted);
+            }
+            .item-zaehler span {
+                color: var(--text);
+                font-weight: 500;
+            }
+
+            .item-actions {
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+                flex-shrink: 0;
+            }
+            .btn-unit {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                font-weight: 500;
+                letter-spacing: 0.04em;
+                background: none;
+                border: 1px solid var(--border-hover);
+                color: var(--text);
+                border-radius: 8px;
+                padding: 7px 13px;
+                cursor: pointer;
+                transition:
+                    background 0.15s,
+                    border-color 0.15s,
+                    color 0.15s;
+                white-space: nowrap;
+            }
+            .btn-unit:hover {
+                background: rgba(255, 255, 255, 0.06);
+                border-color: rgba(255, 255, 255, 0.3);
+            }
+            .btn-unit:active {
+                background: rgba(255, 255, 255, 0.1);
+                transform: scale(0.96);
+            }
+
+            .btn-icon {
+                width: 30px;
+                height: 30px;
+                background: none;
+                border: 1px solid var(--border);
+                border-radius: 7px;
+                color: var(--muted);
+                cursor: pointer;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition:
+                    border-color 0.15s,
+                    color 0.15s;
+                flex-shrink: 0;
+                padding: 0;
+            }
+            .btn-icon:hover {
+                border-color: var(--border-hover);
+                color: var(--text);
+            }
+
+            /* Category color accents */
+            .cat-kiffen .item-card {
+                border-left: 2px solid rgba(74, 222, 128, 0.25);
+            }
+            .cat-kiffen .btn-unit {
+                border-color: rgba(74, 222, 128, 0.4);
+                color: var(--green);
+            }
+            .cat-kiffen .btn-unit:hover {
+                background: rgba(74, 222, 128, 0.08);
+                border-color: rgba(74, 222, 128, 0.7);
+            }
+            .cat-rauchen .item-card {
+                border-left: 2px solid rgba(232, 114, 74, 0.25);
+            }
+            .cat-rauchen .btn-unit {
+                border-color: rgba(232, 114, 74, 0.4);
+                color: var(--orange);
+            }
+            .cat-rauchen .btn-unit:hover {
+                background: rgba(232, 114, 74, 0.08);
+                border-color: rgba(232, 114, 74, 0.7);
+            }
+            .cat-lebensmittel .item-card {
+                border-left: 2px solid rgba(0, 166, 251, 0.25);
+            }
+            .cat-lebensmittel .btn-unit {
+                border-color: rgba(0, 166, 251, 0.4);
+                color: var(--accent-blue);
+            }
+            .cat-lebensmittel .btn-unit:hover {
+                background: rgba(0, 166, 251, 0.08);
+                border-color: rgba(0, 166, 251, 0.7);
+            }
+
+            /* ── Verlauf ── */
+            .history-day {
+                margin-bottom: 1.5rem;
+            }
+            .history-day-header {
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: var(--muted);
+                padding-bottom: 0.5rem;
+                border-bottom: 1px solid var(--border);
+                margin-bottom: 0.75rem;
+            }
+            .history-entry {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                padding: 0.5rem 0;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            }
+            .history-time {
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                color: var(--muted);
+                width: 42px;
+                flex-shrink: 0;
+            }
+            .history-name {
+                font-family: "Syne", sans-serif;
+                font-size: 0.85rem;
+                font-weight: 600;
+                flex: 1;
+                min-width: 0;
+            }
+            .history-type-badge {
+                font-family: "DM Mono", monospace;
+                font-size: 9px;
+                padding: 1px 6px;
+                border-radius: 3px;
+                flex-shrink: 0;
+            }
+            .history-type-badge.bestand {
+                background: rgba(255, 180, 0, 0.1);
+                border: 1px solid rgba(255, 180, 0, 0.25);
+                color: #ffb400;
+            }
+            .history-type-badge.zaehler {
+                background: rgba(0, 166, 251, 0.08);
+                border: 1px solid rgba(0, 166, 251, 0.2);
+                color: var(--accent-blue);
+            }
+            .history-amount {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                color: var(--muted);
+                white-space: nowrap;
+            }
+            .history-amount span {
+                color: var(--text);
+                font-weight: 500;
+            }
+            .history-delete {
+                width: 24px;
+                height: 24px;
+                background: none;
+                border: none;
+                color: rgba(255, 0, 81, 0.3);
+                cursor: pointer;
+                font-size: 14px;
+                padding: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border-radius: 5px;
+                transition:
+                    color 0.15s,
+                    background 0.15s;
+                flex-shrink: 0;
+            }
+            .history-delete:hover {
+                color: var(--accent-red);
+                background: rgba(255, 0, 81, 0.08);
+            }
+            .history-day-totals {
+                margin-top: 0.5rem;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.35rem;
+            }
+            .history-total-badge {
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                padding: 2px 8px;
+                border-radius: 4px;
+                border: 1px solid var(--border);
+                color: var(--muted);
+            }
+
+            /* ── Bottom Sheet (shared) ── */
+            .overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.75);
+                z-index: 100;
+                display: flex;
+                align-items: flex-end;
+                justify-content: center;
+            }
+            .overlay-sheet {
+                background: #161616;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 16px 16px 0 0;
+                padding: 1.5rem 1.25rem 2.5rem;
+                width: 100%;
+                max-width: 480px;
+            }
+            .sheet-label {
+                font-family: "DM Mono", monospace;
+                font-size: 9px;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: var(--muted);
+                margin-bottom: 4px;
+            }
+            .sheet-title {
+                font-family: "Syne", sans-serif;
+                font-size: 1.3rem;
+                font-weight: 800;
+                margin-bottom: 1.25rem;
+                letter-spacing: -0.02em;
+            }
+            .sheet-subtitle {
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                color: var(--muted);
+                margin-bottom: 1rem;
+                line-height: 1.6;
+            }
+
+            /* Toggle for Bestand vs Zähler */
+            .mode-toggle {
+                display: flex;
+                gap: 0.4rem;
+                margin-bottom: 1rem;
+            }
+            .mode-btn {
+                flex: 1;
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                padding: 8px;
+                border-radius: 8px;
+                border: 1px solid var(--border);
+                background: none;
+                color: var(--muted);
+                cursor: pointer;
+                transition: all 0.15s;
+                text-align: center;
+            }
+            .mode-btn.active {
+                border-color: var(--accent-blue);
+                color: var(--accent-blue);
+                background: rgba(0, 166, 251, 0.08);
+            }
+
+            .input-row {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 0.5rem 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+            .input-row input {
+                flex: 1;
+                background: none;
+                border: none;
+                color: var(--text);
+                font-family: "DM Mono", monospace;
+                font-size: 1.4rem;
+                font-weight: 500;
+                outline: none;
+                min-width: 0;
+            }
+            .input-row input::placeholder {
+                color: rgba(255, 255, 255, 0.15);
+            }
+            .input-unit {
+                font-family: "DM Mono", monospace;
+                font-size: 13px;
+                color: var(--muted);
+                flex-shrink: 0;
+            }
+            .presets {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.4rem;
+                margin-bottom: 0.75rem;
+            }
+            .preset-btn {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                padding: 5px 12px;
+                border-radius: 6px;
+                border: 1px solid var(--border);
+                color: var(--muted);
+                background: none;
+                cursor: pointer;
+                transition: all 0.15s;
+            }
+            .preset-btn:hover {
+                border-color: var(--border-hover);
+                color: var(--text);
+                background: rgba(255, 255, 255, 0.04);
+            }
+            .note-input {
+                width: 100%;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 8px 12px;
+                color: var(--text);
+                font-family: "DM Mono", monospace;
+                font-size: 12px;
+                outline: none;
+                margin-bottom: 1rem;
+            }
+            .note-input::placeholder {
+                color: var(--muted);
+            }
+            .sheet-btns {
+                display: flex;
+                gap: 0.5rem;
+            }
+            .btn-save {
+                flex: 1;
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                font-weight: 500;
+                letter-spacing: 0.06em;
+                background: var(--green);
+                color: #0a0a0b;
+                border: none;
+                border-radius: 8px;
+                padding: 11px;
+                cursor: pointer;
+            }
+            .btn-cancel {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                background: none;
+                border: 1px solid var(--border);
+                color: var(--muted);
+                border-radius: 8px;
+                padding: 11px 18px;
+                cursor: pointer;
+            }
+
+            /* ── Toast ── */
+            .toast {
+                position: fixed;
+                bottom: 2rem;
+                left: 50%;
+                transform: translateX(-50%) translateY(20px);
+                background: #1e1e20;
+                border: 1px solid var(--border-hover);
+                border-radius: 8px;
+                padding: 9px 18px;
+                font-family: "DM Mono", monospace;
+                font-size: 12px;
+                color: var(--text);
+                z-index: 200;
+                opacity: 0;
+                transition:
+                    opacity 0.2s,
+                    transform 0.2s;
+                pointer-events: none;
+                white-space: nowrap;
+            }
+            .toast.show {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+
+            /* ── Footer ── */
+            .app-footer {
+                border-top: 1px solid var(--border);
+                padding: 1rem 0;
+                display: flex;
+                justify-content: space-between;
+                margin-top: auto;
+            }
+            .app-footer span {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                color: var(--muted);
+            }
+            .empty-state {
+                font-family: "DM Mono", monospace;
+                font-size: 12px;
+                color: var(--muted);
+                text-align: center;
+                padding: 2.5rem 1rem;
+                border: 1px dashed var(--border);
+                border-radius: 16px;
+                line-height: 1.8;
+            }
+
+            /* ── Worktracker supplement row ── */
+            .item-wt-row {
+                display: flex;
+                align-items: center;
+                gap: .5rem;
+                margin-top: 5px;
+                flex-wrap: wrap;
+            }
+            .wt-arbeit-badge {
+                font-family: 'DM Mono', monospace;
+                font-size: 9px;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+                padding: 1px 6px;
+                border-radius: 3px;
+                background: rgba(0,166,237,.1);
+                border: 1px solid rgba(0,166,237,.25);
+                color: var(--accent-blue);
+                flex-shrink: 0;
+            }
+            .wt-arbeit-val {
+                font-family: 'DM Mono', monospace;
+                font-size: 11px;
+                color: var(--text);
+                font-weight: 500;
+            }
+            .wt-arbeit-src {
+                font-family: 'DM Mono', monospace;
+                font-size: 10px;
+                color: var(--muted);
+            }
+
+            @media (max-width: 560px) {
+                .item-name {
+                    font-size: 0.9rem;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="grid-bg"></div>
+        <div class="blobs" id="blobs"></div>
+
+        <div class="app-wrap">
+            <nav class="app-nav">
+                <a href="https://bensn.me" class="nav-crumb"
+                    ><span>bensn</span>.me</a
+                >
+                <span class="nav-sep">/</span>
+                <span class="nav-current">tracking</span>
+                <div class="nav-right">
+                    <div
+                        class="dot"
+                        id="statusDot"
+                        style="background: var(--muted); animation: none"
+                    ></div>
+                    <span id="statusText">laden…</span>
+                </div>
+            </nav>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('heute', this)">
+                    Heute
+                </button>
+                <button class="tab" onclick="switchTab('verlauf', this)">
+                    Verlauf
+                </button>
+            </div>
+
+            <!-- ═══ TAB: HEUTE ═══ -->
+            <div id="tab-heute" class="tab-section visible">
+                <!-- API Status -->
+                <div class="api-bar">
+                    <div class="dot-sm" id="apiDot"></div>
+                    <span id="apiStatusText">Verbinde…</span>
+                    <span
+                        class="api-bar-right"
+                        onclick="loadAll()"
+                        title="Neu laden"
+                        >↻</span
+                    >
+                </div>
+
+                <!-- Kiffen -->
+                <div class="cat-group cat-kiffen">
+                    <div class="cat-header">
+                        <span class="cat-icon">🌿</span>
+                        <span class="cat-title">Kiffen</span>
+                        <span class="cat-today-total" id="total-kiffen"></span>
+                    </div>
+                    <div id="items-kiffen"></div>
+                </div>
+
+                <!-- Rauchen -->
+                <div class="cat-group cat-rauchen">
+                    <div class="cat-header">
+                        <span class="cat-icon">🚬</span>
+                        <span class="cat-title">Rauchen</span>
+                        <span class="cat-today-total" id="total-rauchen"></span>
+                    </div>
+                    <div id="items-rauchen"></div>
+                </div>
+
+                <!-- Lebensmittel -->
+                <div class="cat-group cat-lebensmittel">
+                    <div class="cat-header">
+                        <span class="cat-icon">☕</span>
+                        <span class="cat-title">Lebensmittel</span>
+                        <span
+                            class="cat-today-total"
+                            id="total-lebensmittel"
+                        ></span>
+                    </div>
+                    <div id="items-lebensmittel"></div>
+                </div>
+            </div>
+
+            <!-- ═══ TAB: VERLAUF ═══ -->
+            <div id="tab-verlauf" class="tab-section">
+                <div id="verlauf-content"></div>
+            </div>
+
+            <footer class="app-footer">
+                <span>tracking.bensn.me</span>
+                <span id="footer-clock"></span>
+            </footer>
+        </div>
+
+        <!-- ── Entry Bottom Sheet ── -->
+        <div
+            id="overlay"
+            class="overlay"
+            style="display: none"
+            onclick="closeOverlay(event)"
+        >
+            <div class="overlay-sheet" onclick="event.stopPropagation()">
+                <div class="sheet-label">Eintrag</div>
+                <div class="sheet-title" id="overlay-name">—</div>
+
+                <!-- Mode info for Bestand items -->
+                <div
+                    id="bestand-hint"
+                    style="display: none"
+                    class="sheet-subtitle"
+                >
+                    Aktuellen Bestand eintragen.<br />
+                    <span style="color: rgba(255, 180, 0, 0.8)"
+                        >Verbrauch = Differenz zum letzten Eintrag.</span
+                    >
+                </div>
+
+                <div
+                    class="sheet-label"
+                    style="margin-bottom: 4px"
+                    id="overlay-field-label"
+                >
+                    Menge
+                </div>
+                <div class="input-row">
+                    <input
+                        id="overlay-amount"
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0"
+                    />
+                    <span class="input-unit" id="overlay-unit">g</span>
+                </div>
+                <div class="presets" id="overlay-presets"></div>
+                <div class="sheet-label" style="margin-bottom: 4px">
+                    Notiz (optional)
+                </div>
+                <input
+                    class="note-input"
+                    id="overlay-note"
+                    type="text"
+                    placeholder="z.B. neue Packung…"
+                />
+                <div class="sheet-btns">
+                    <button class="btn-save" onclick="submitEntry()">
+                        Speichern
+                    </button>
+                    <button
+                        class="btn-cancel"
+                        onclick="
+                            document.getElementById('overlay').style.display =
+                                'none'
+                        "
+                    >
+                        Abbrechen
+                    </button>
+                </div>
+                <div
+                    id="overlay-msg"
+                    style="
+                        font-family: &quot;DM Mono&quot;, monospace;
+                        font-size: 11px;
+                        margin-top: 0.5rem;
+                        text-align: center;
+                    "
+                ></div>
+            </div>
+        </div>
+
+        <!-- Toast -->
+        <div class="toast" id="toast"></div>
+
+        <script src="/shared/bensn.js"></script>
+        <script>
+            /* ════════════════════════════════════════════════════════════════
+   CONFIG
+   tracking_mode:
+     'bestand'  — Vorratstracker: du trägst aktuellen Bestand ein,
+                  Verbrauch = Differenz zwischen Einträgen
+     'zaehler'  — Zähler: du loggst einzelne Konsumeinheiten,
+                  tägl. Summe wird hochgezählt
+   unit_size:   Menge pro Schnell-Button (+1 Einheit)
+   base_unit:   Gespeicherte Einheit
+   presets:     Schnellauswahl-Werte im manuellen Dialog
+   ════════════════════════════════════════════════════════════════ */
+            const ITEMS = [
+                /* ── Kiffen ── */
+                {
+                    id: "weed",
+                    category: "kiffen",
+                    name: "Weed",
+                    tracking_mode: "bestand",
+                    unit_size: 0.5,
+                    base_unit: "g",
+                    presets: [0.5, 1, 2, 5, 10],
+                    emoji: "🌿",
+                },
+                {
+                    id: "filter-joint",
+                    category: "kiffen",
+                    name: "Filter (Joint)",
+                    tracking_mode: "bestand",
+                    unit_size: 10,
+                    base_unit: "Stk.",
+                    presets: [10, 25, 50, 100],
+                },
+                {
+                    id: "papes-joint",
+                    category: "kiffen",
+                    name: "Papes (Joint)",
+                    tracking_mode: "bestand",
+                    unit_size: 10,
+                    base_unit: "Stk.",
+                    presets: [10, 25, 50, 100],
+                },
+                /* ── Rauchen (Freizeit) ── */
+                {
+                    id: "zigarette",
+                    category: "rauchen",
+                    name: "Zigarette",
+                    tracking_mode: "zaehler",
+                    unit_size: 1,
+                    base_unit: "Stk.",
+                    presets: [1, 2, 5],
+                    emoji: "🚬",
+                },
+                {
+                    id: "spicy",
+                    category: "rauchen",
+                    name: "Spicy",
+                    tracking_mode: "zaehler",
+                    unit_size: 1,
+                    base_unit: "Stk.",
+                    presets: [1, 2, 5],
+                },
+                {
+                    id: "ofen",
+                    category: "rauchen",
+                    name: "Ofen",
+                    tracking_mode: "zaehler",
+                    unit_size: 1,
+                    base_unit: "Stk.",
+                    presets: [1, 2],
+                },
+                {
+                    id: "papes-tabak",
+                    category: "rauchen",
+                    name: "Papes (Tabak)",
+                    tracking_mode: "bestand",
+                    unit_size: 50,
+                    base_unit: "Stk.",
+                    presets: [50, 100, 200],
+                },
+                {
+                    id: "filter-tabak",
+                    category: "rauchen",
+                    name: "Filter (Tabak)",
+                    tracking_mode: "bestand",
+                    unit_size: 50,
+                    base_unit: "Stk.",
+                    presets: [50, 100, 200],
+                },
+                {
+                    id: "tabak",
+                    category: "rauchen",
+                    name: "Tabak",
+                    tracking_mode: "bestand",
+                    unit_size: 100,
+                    base_unit: "g",
+                    presets: [100, 250, 500, 1000],
+                },
+                /* ── Lebensmittel ── */
+                {
+                    id: "kaffee",
+                    category: "lebensmittel",
+                    name: "Kaffee",
+                    tracking_mode: "bestand",
+                    unit_size: 250,
+                    base_unit: "g",
+                    presets: [100, 250, 500, 1000],
+                },
+                {
+                    id: "redbull",
+                    category: "lebensmittel",
+                    name: "Red Bull",
+                    tracking_mode: "zaehler",
+                    unit_size: 1,
+                    base_unit: "Dose",
+                    display_ml: 250,
+                    presets: [1, 2, 4],
+                },
+            ];
+
+            /* ════════════════════════════════════════════════════════════════
+   API CONFIG
+   ════════════════════════════════════════════════════════════════ */
+            const API_BASE = ""; // relative URL, gleiche Domain
+
+            function apiHeaders() {
+                return {
+                    "Content-Type": "application/json",
+                    "X-API-Key":
+                        "a9b571df1b237992f87e1126411403ff1ab57cf9aa9b9829015e4c842be8c6f5",
+                };
+            }
+
+            async function apiFetch(path, method = "GET", body = null) {
+                const opts = { method, headers: apiHeaders() };
+                if (body) opts.body = JSON.stringify(body);
+                const r = await fetch(API_BASE + path, opts);
+                if (!r.ok) throw new Error(r.status + " " + r.statusText);
+                return r.json();
+            }
+
+            /* ════════════════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════════════════ */
+            let _allEntries = []; // fetched from API
+            let _apiOnline = false;
+            let _overlayItem = null;
+            // Worktracker cigarette data keyed by date (YYYY-MM-DD)
+            // { 'YYYY-MM-DD': { spicy: N, blend: N, shifts: [{station, spicy, blend}] } }
+            let _wtByDate = {};
+
+            /* ════════════════════════════════════════════════════════════════
+   API LOAD
+   ════════════════════════════════════════════════════════════════ */
+            async function loadAll() {
+                setApiStatus("loading");
+                try {
+                    const [trackingData, shiftsData] = await Promise.all([
+                        apiFetch("/api/tracking/entries?limit=500"),
+                        apiFetch("/api/shifts?limit=100"),
+                    ]);
+                    _allEntries = trackingData.entries || [];
+
+                    // Fetch break details for each shift, group by Vienna local date
+                    const shifts = shiftsData.shifts || shiftsData || [];
+                    const newWtByDate = {};
+
+                    await Promise.all(shifts.map(async s => {
+                        try {
+                            const detail = await apiFetch(`/api/shift/${s.id}`);
+                            const breaks = detail.breaks || [];
+                            const sSpicy = breaks.reduce((a, b) => a + (b.zig_spicy || 0), 0);
+                            const sBlend = breaks.reduce((a, b) => a + (b.zig_blend || 0), 0);
+                            if (sSpicy === 0 && sBlend === 0) return;
+                            // Date = Vienna local date of shift start
+                            const dateKey = new Date(s.work_start).toLocaleDateString('en-CA', { timeZone: 'Europe/Vienna' });
+                            if (!newWtByDate[dateKey]) newWtByDate[dateKey] = { spicy: 0, blend: 0, shifts: [] };
+                            newWtByDate[dateKey].spicy += sSpicy;
+                            newWtByDate[dateKey].blend += sBlend;
+                            newWtByDate[dateKey].shifts.push({ station: s.station, shift_type: s.shift_type, spicy: sSpicy, blend: sBlend });
+                        } catch(_) {}
+                    }));
+                    _wtByDate = newWtByDate;
+
+                    _apiOnline = true;
+                    setApiStatus("ok");
+                    renderToday();
+                    if (document.getElementById("tab-verlauf").classList.contains("visible"))
+                        renderVerlauf();
+                } catch (e) {
+                    _apiOnline = false;
+                    setApiStatus("err", e.message);
+                    renderToday();
+                }
+            }
+
+            function setApiStatus(state, msg) {
+                const dot = document.getElementById("apiDot");
+                const text = document.getElementById("apiStatusText");
+                const navDot = document.getElementById("statusDot");
+                const navText = document.getElementById("statusText");
+                if (state === "ok") {
+                    dot.className = "dot-sm ok";
+                    text.textContent = `API verbunden · ${_allEntries.length} Einträge`;
+                    navDot.style.background = "var(--green)";
+                    navDot.style.animation = "pulse 2s ease-in-out infinite";
+                    navText.textContent = todayCount() + " heute";
+                } else if (state === "err") {
+                    dot.className = "dot-sm err";
+                    text.textContent =
+                        "API nicht erreichbar" + (msg ? ` · ${msg}` : "");
+                    navDot.style.background = "var(--accent-red)";
+                    navDot.style.animation = "none";
+                    navText.textContent = "offline";
+                } else {
+                    dot.className = "dot-sm";
+                    text.textContent = "Verbinde…";
+                    navDot.style.background = "var(--muted)";
+                    navDot.style.animation = "none";
+                    navText.textContent = "laden…";
+                }
+            }
+
+            /* ════════════════════════════════════════════════════════════════
+   HELPERS
+   ════════════════════════════════════════════════════════════════ */
+            function pad(n) {
+                return String(n).padStart(2, "0");
+            }
+
+            function todayKey() {
+                const d = new Date();
+                // Vienna local date
+                const vStr = d.toLocaleDateString("en-CA", {
+                    timeZone: "Europe/Vienna",
+                });
+                return vStr; // YYYY-MM-DD
+            }
+
+            function todayCount() {
+                const td = todayKey();
+                return _allEntries.filter((e) => e.date === td).length;
+            }
+
+            function entriesForItem(itemId) {
+                return _allEntries.filter((e) => e.item_id === itemId);
+            }
+
+            function entriesForItemToday(itemId) {
+                const td = todayKey();
+                return _allEntries.filter(
+                    (e) => e.item_id === itemId && e.date === td,
+                );
+            }
+
+            function latestBestand(itemId) {
+                const entries = entriesForItem(itemId).filter(
+                    (e) => e.entry_type === "bestand",
+                );
+                if (!entries.length) return null;
+                entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+                return entries[0];
+            }
+
+            function computedVerbrauch(itemId) {
+                // For Bestand items: difference between the two most recent Bestand entries
+                const entries = entriesForItem(itemId)
+                    .filter((e) => e.entry_type === "bestand")
+                    .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+                if (entries.length < 2) return null;
+                const diff = entries[1].amount - entries[0].amount; // older - newer = consumed
+                return diff > 0 ? diff : null;
+            }
+
+            function zaehlerToday(itemId) {
+                const td = todayKey();
+                const entries = _allEntries.filter(
+                    (e) =>
+                        e.item_id === itemId &&
+                        e.date === td &&
+                        e.entry_type === "zaehler",
+                );
+                return entries.reduce((s, e) => s + e.amount, 0);
+            }
+
+            function fmtAmt(amount, item) {
+                if (!item) return amount;
+                if (item.id === "redbull") {
+                    return amount === 1 ? "1 Dose" : `${amount} Dosen`;
+                }
+                if (item.base_unit === "g") {
+                    if (amount >= 1000) {
+                        const kg = (amount / 1000).toFixed(1).replace(".0", "");
+                        return `${kg} kg`;
+                    }
+                    return `${amount} g`;
+                }
+                return `${amount} ${item.base_unit}`;
+            }
+
+            function localDateStr(isoStr) {
+                if (!isoStr) return "—";
+                const d = new Date(isoStr);
+                return d.toLocaleDateString("de-AT", {
+                    timeZone: "Europe/Vienna",
+                    day: "2-digit",
+                    month: "2-digit",
+                });
+            }
+            function localTimeStr(isoStr) {
+                if (!isoStr) return "—";
+                const d = new Date(isoStr);
+                return d.toLocaleTimeString("de-AT", {
+                    timeZone: "Europe/Vienna",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
+            }
+
+            /* ════════════════════════════════════════════════════════════════
+   RENDER — Today
+   ════════════════════════════════════════════════════════════════ */
+            function renderToday() {
+                const d = new Date();
+                const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+                // Category totals in nav
+                document.getElementById("statusText").textContent =
+                    todayCount() + " heute";
+
+                const cats = ["kiffen", "rauchen", "lebensmittel"];
+                cats.forEach((cat) => {
+                    const container = document.getElementById(`items-${cat}`);
+                    const catItems = ITEMS.filter((i) => i.category === cat);
+                    container.innerHTML = "";
+
+                    let catActivity = 0;
+                    catItems.forEach((item) => {
+                        if (item.tracking_mode === "bestand") {
+                            const latest = latestBestand(item.id);
+                            const verbrauch = computedVerbrauch(item.id);
+                            const bestandVal = latest ? latest.amount : null;
+                            const bestandDate = latest
+                                ? localDateStr(latest.timestamp)
+                                : null;
+
+                            // Button: "Bestand eintragen"
+                            const btnLabel = "Bestand";
+
+                            let bestandHtml = "";
+                            if (bestandVal !== null) {
+                                catActivity++;
+                                let verbrauchHtml = "";
+                                if (verbrauch !== null) {
+                                    verbrauchHtml = `<span class="bestand-verbrauch">Verbrauch: ${fmtAmt(verbrauch, item)}</span>`;
+                                }
+                                bestandHtml = `
+            <div class="item-bestand">
+              <span class="bestand-val">${fmtAmt(bestandVal, item)}</span>
+              <span class="bestand-label">Bestand</span>
+              <span style="color:rgba(255,255,255,.15);font-size:9px">·</span>
+              <span class="bestand-label">${bestandDate}</span>
+              ${verbrauch !== null ? `<span style="color:rgba(255,255,255,.15);font-size:9px">·</span>${verbrauchHtml}` : ""}
+            </div>`;
+                            } else {
+                                bestandHtml = `<div class="item-bestand"><span class="bestand-label">Kein Bestand eingetragen</span></div>`;
+                            }
+
+                            container.innerHTML += `
+          <div class="item-card">
+            <div>
+              <div class="item-name">${item.name}</div>
+              <div class="item-meta">Bestandstracker · ${item.base_unit}</div>
+              ${bestandHtml}
+            </div>
+            <div class="item-actions">
+              <button class="btn-unit" onclick="openEntry('${item.id}')">${btnLabel}</button>
+            </div>
+          </div>`;
+                        } else {
+                            // Zähler
+                            const total = zaehlerToday(item.id);
+                            if (total > 0) catActivity++;
+
+                            // Worktracker supplement for spicy + blend (zigarette)
+                            const wtToday = _wtByDate[todayKey()] || { spicy: 0, blend: 0, shifts: [] };
+                            let wtSupplementHtml = '';
+                            if (item.id === 'spicy' && wtToday.spicy > 0) {
+                                catActivity++;
+                                const shiftLabel = wtToday.shifts.length
+                                    ? wtToday.shifts.map(s => s.station).join(', ')
+                                    : 'Dienst';
+                                wtSupplementHtml = `<div class="item-wt-row">
+                                    <span class="wt-arbeit-badge">Arbeit</span>
+                                    <span class="wt-arbeit-val">+${wtToday.spicy} im Dienst</span>
+                                    <span class="wt-arbeit-src">${shiftLabel}</span>
+                                </div>`;
+                            }
+                            if (item.id === 'zigarette' && wtToday.blend > 0) {
+                                catActivity++;
+                                const shiftLabel = wtToday.shifts.length
+                                    ? wtToday.shifts.map(s => s.station).join(', ')
+                                    : 'Dienst';
+                                wtSupplementHtml = `<div class="item-wt-row">
+                                    <span class="wt-arbeit-badge">Arbeit</span>
+                                    <span class="wt-arbeit-val">+${wtToday.blend} im Dienst</span>
+                                    <span class="wt-arbeit-src">${shiftLabel}</span>
+                                </div>`;
+                            }
+
+                            const totalIncWT = item.id === 'spicy'
+                                ? total + wtToday.spicy
+                                : item.id === 'zigarette'
+                                    ? total + wtToday.blend
+                                    : total;
+
+                            const btnLabel =
+                                item.id === "redbull" ? "+1 Dose" : `+1`;
+                            container.innerHTML += `
+          <div class="item-card">
+            <div>
+              <div class="item-name">${item.name}</div>
+              <div class="item-meta">Zähler · pro Konsum eintragen</div>
+              <div class="item-zaehler">Freizeit: <span>${total > 0 ? fmtAmt(total, item) : "—"}</span>${totalIncWT > total ? ` · Gesamt: <span>${fmtAmt(totalIncWT, item)}</span>` : ''}</div>
+              ${wtSupplementHtml}
+            </div>
+            <div class="item-actions">
+              <button class="btn-unit" onclick="quickAdd('${item.id}')">${btnLabel}</button>
+              <button class="btn-icon" onclick="openEntry('${item.id}')" title="Manuell / mit Notiz">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"/></svg>
+              </button>
+            </div>
+          </div>`;
+                        }
+                    });
+
+                    const totalEl = document.getElementById(`total-${cat}`);
+                    totalEl.textContent =
+                        catActivity > 0 ? `${catActivity} aktiv` : "";
+                });
+            }
+
+            /* ════════════════════════════════════════════════════════════════
+   RENDER — Verlauf
+   ════════════════════════════════════════════════════════════════ */
+            function renderVerlauf() {
+                const container = document.getElementById("verlauf-content");
+
+                if (!_allEntries.length && !Object.keys(_wtByDate).length) {
+                    container.innerHTML =
+                        '<div class="empty-state">Noch keine Einträge.<br>Füge deinen ersten Eintrag über "Heute" hinzu.</div>';
+                    return;
+                }
+
+                // Group by date
+                const byDate = {};
+                _allEntries.forEach((e) => {
+                    if (!byDate[e.date]) byDate[e.date] = [];
+                    byDate[e.date].push(e);
+                });
+
+                const td = todayKey();
+                const yd = (() => {
+                    const x = new Date();
+                    x.setDate(x.getDate() - 1);
+                    return x.toLocaleDateString("en-CA", {
+                        timeZone: "Europe/Vienna",
+                    });
+                })();
+                const days = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+                // Merge: dates from tracking entries + dates from WT data
+                const allDates = new Set([
+                    ...Object.keys(byDate),
+                    ...Object.keys(_wtByDate),
+                ]);
+                const dates = [...allDates]
+                    .sort((a, b) => b.localeCompare(a))
+                    .slice(0, 30);
+                container.innerHTML = "";
+
+                dates.forEach((date) => {
+                    const entries = (byDate[date] || []).sort((a, b) =>
+                        b.timestamp.localeCompare(a.timestamp),
+                    );
+                    const [y, m, d] = date.split("-");
+                    const dd = new Date(+y, +m - 1, +d);
+                    const dateLabel =
+                        date === td
+                            ? "Heute"
+                            : date === yd
+                              ? "Gestern"
+                              : `${days[dd.getDay()]}, ${d}.${m}.${y}`;
+
+                    // Tages-Totals (Zähler only)
+                    const zaehlerTotals = {};
+                    entries
+                        .filter((e) => e.entry_type === "zaehler")
+                        .forEach((e) => {
+                            zaehlerTotals[e.item_id] =
+                                (zaehlerTotals[e.item_id] || 0) + e.amount;
+                        });
+
+                    // Add WT data to totals for this date
+                    const wtDay = _wtByDate[date] || { spicy: 0, blend: 0, shifts: [] };
+                    if (wtDay.spicy > 0) zaehlerTotals['spicy'] = (zaehlerTotals['spicy'] || 0) + wtDay.spicy;
+                    if (wtDay.blend > 0) zaehlerTotals['zigarette'] = (zaehlerTotals['zigarette'] || 0) + wtDay.blend;
+
+                    const totalBadges = Object.entries(zaehlerTotals)
+                        .map(([itemId, amt]) => {
+                            const item = ITEMS.find((i) => i.id === itemId);
+                            return `<span class="history-total-badge">${item ? item.name : "?"}: ${fmtAmt(amt, item)}</span>`;
+                        })
+                        .join("");
+
+                    const entryRows = entries
+                        .map((e) => {
+                            const item = ITEMS.find((i) => i.id === e.item_id);
+                            const timeStr = localTimeStr(e.timestamp);
+                            const typeLabel =
+                                e.entry_type === "bestand"
+                                    ? `<span class="history-type-badge bestand">Bestand</span>`
+                                    : `<span class="history-type-badge zaehler">+${fmtAmt(e.amount, item)}</span>`;
+                            return `<div class="history-entry">
+        <span class="history-time">${timeStr}</span>
+        <span class="history-name">${e.name}</span>
+        ${typeLabel}
+        <span class="history-amount"><span>${fmtAmt(e.amount, item)}</span>${e.note ? ` · <span style="color:var(--muted)">${e.note}</span>` : ""}</span>
+        <button class="history-delete" onclick="deleteEntry('${e.id}')" title="Löschen">×</button>
+      </div>`;
+                        })
+                        .join("");
+
+                    // WT read-only rows for any date that has WT data
+                    let wtRows = '';
+                    if (wtDay.spicy > 0) {
+                        const src = wtDay.shifts.map(s => s.station).join(', ') || 'Dienst';
+                        wtRows += `<div class="history-entry" style="opacity:.7">
+        <span class="history-time" style="color:var(--accent-blue)">WT</span>
+        <span class="history-name">Spicy</span>
+        <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
+        <span class="history-amount"><span>${wtDay.spicy} Stk.</span> · ${src}</span>
+        <span style="width:24px;flex-shrink:0"></span>
+      </div>`;
+                    }
+                    if (wtDay.blend > 0) {
+                        const src = wtDay.shifts.map(s => s.station).join(', ') || 'Dienst';
+                        wtRows += `<div class="history-entry" style="opacity:.7">
+        <span class="history-time" style="color:var(--accent-blue)">WT</span>
+        <span class="history-name">Zigarette</span>
+        <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
+        <span class="history-amount"><span>${wtDay.blend} Stk.</span> · ${src}</span>
+        <span style="width:24px;flex-shrink:0"></span>
+      </div>`;
+                    }
+
+                    const totalEntries = entries.length + (wtDay.spicy > 0 ? 1 : 0) + (wtDay.blend > 0 ? 1 : 0);
+
+                    container.innerHTML += `
+      <div class="history-day">
+        <div class="history-day-header">${dateLabel} · ${totalEntries} Eintr.</div>
+        ${entryRows}${wtRows}
+        ${totalBadges ? `<div class="history-day-totals">${totalBadges}</div>` : ""}
+      </div>`;
+                });
+            }
+
+            /* ════════════════════════════════════════════════════════════════
+   ENTRY ACTIONS
+   ════════════════════════════════════════════════════════════════ */
+            async function quickAdd(itemId) {
+                const item = ITEMS.find((i) => i.id === itemId);
+                if (!item || item.tracking_mode !== "zaehler") return;
+                await postEntry(itemId, item.unit_size, "zaehler", null);
+                showToast(`${item.name} +${fmtAmt(item.unit_size, item)}`);
+                await loadAll();
+            }
+
+            function openEntry(itemId) {
+                const item = ITEMS.find((i) => i.id === itemId);
+                if (!item) return;
+                _overlayItem = item;
+
+                document.getElementById("overlay-name").textContent = item.name;
+                document.getElementById("overlay-unit").textContent =
+                    item.base_unit;
+                document.getElementById("overlay-amount").value = "";
+                document.getElementById("overlay-note").value = "";
+                document.getElementById("overlay-msg").textContent = "";
+
+                // Bestand hint
+                const hint = document.getElementById("bestand-hint");
+                const fieldLabel = document.getElementById(
+                    "overlay-field-label",
+                );
+                if (item.tracking_mode === "bestand") {
+                    hint.style.display = "block";
+                    fieldLabel.textContent = "Aktueller Bestand";
+                    const latest = latestBestand(item.id);
+                    if (latest) {
+                        document.getElementById("overlay-amount").placeholder =
+                            latest.amount;
+                    } else {
+                        document.getElementById("overlay-amount").placeholder =
+                            "0";
+                    }
+                } else {
+                    hint.style.display = "none";
+                    fieldLabel.textContent = "Menge";
+                    document.getElementById("overlay-amount").placeholder = "0";
+                }
+
+                // Presets
+                const presetsEl = document.getElementById("overlay-presets");
+                presetsEl.innerHTML = "";
+                (item.presets || []).forEach((p) => {
+                    presetsEl.innerHTML += `<button class="preset-btn" onclick="document.getElementById('overlay-amount').value='${p}'">${p} ${item.base_unit}</button>`;
+                });
+
+                document.getElementById("overlay").style.display = "flex";
+                setTimeout(
+                    () => document.getElementById("overlay-amount").focus(),
+                    100,
+                );
+            }
+
+            function closeOverlay(e) {
+                document.getElementById("overlay").style.display = "none";
+            }
+
+            async function submitEntry() {
+                const item = _overlayItem;
+                if (!item) return;
+                const raw = parseFloat(
+                    document.getElementById("overlay-amount").value,
+                );
+                const note =
+                    document.getElementById("overlay-note").value || null;
+                const msg = document.getElementById("overlay-msg");
+
+                if (!raw || raw <= 0) {
+                    document.getElementById("overlay-amount").focus();
+                    return;
+                }
+
+                msg.style.color = "var(--muted)";
+                msg.textContent = "Speichere…";
+
+                try {
+                    await postEntry(item.id, raw, item.tracking_mode, note);
+                    document.getElementById("overlay").style.display = "none";
+                    showToast(
+                        `${item.name} ${item.tracking_mode === "bestand" ? "→ " + fmtAmt(raw, item) : "+" + fmtAmt(raw, item)}`,
+                    );
+                    await loadAll();
+                } catch (e) {
+                    msg.style.color = "var(--accent-red)";
+                    msg.textContent = "Fehler: " + e.message;
+                }
+            }
+
+            async function postEntry(itemId, amount, entryType, note) {
+                const item = ITEMS.find((i) => i.id === itemId);
+                const payload = {
+                    item_id: itemId,
+                    category: item.category,
+                    name: item.name,
+                    amount,
+                    unit: item.base_unit,
+                    entry_type: entryType, // 'bestand' | 'zaehler'
+                    note: note || null,
+                    date: todayKey(),
+                    source: "pwa",
+                };
+                return apiFetch("/api/tracking/entry", "POST", payload);
+            }
+
+            async function deleteEntry(entryId) {
+                if (!confirm("Eintrag löschen?")) return;
+                try {
+                    await apiFetch(`/api/tracking/entry/${entryId}`, "DELETE");
+                    showToast("Gelöscht");
+                    await loadAll();
+                } catch (e) {
+                    showToast("Fehler: " + e.message);
+                }
+            }
+
+            /* ════════════════════════════════════════════════════════════════
+   TABS / TOAST / CLOCK
+   ════════════════════════════════════════════════════════════════ */
+            function switchTab(t, el) {
+                document
+                    .querySelectorAll(".tab")
+                    .forEach((x) => x.classList.remove("active"));
+                el.classList.add("active");
+                document
+                    .getElementById("tab-heute")
+                    .classList.toggle("visible", t === "heute");
+                document
+                    .getElementById("tab-verlauf")
+                    .classList.toggle("visible", t === "verlauf");
+                if (t === "verlauf") renderVerlauf();
+            }
+
+            let toastTimer;
+            function showToast(msg) {
+                const el = document.getElementById("toast");
+                el.textContent = msg;
+                el.classList.add("show");
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(
+                    () => el.classList.remove("show"),
+                    1800,
+                );
+            }
+
+            function clockTick() {
+                const n = new Date();
+                const el = document.getElementById("footer-clock");
+                if (el)
+                    el.textContent =
+                        pad(n.getHours()) +
+                        ":" +
+                        pad(n.getMinutes()) +
+                        ":" +
+                        pad(n.getSeconds());
+            }
+            clockTick();
+            setInterval(clockTick, 1000);
+
+            document.addEventListener("keydown", (e) => {
+                if (
+                    e.key === "Enter" &&
+                    document.getElementById("overlay").style.display !== "none"
+                )
+                    submitEntry();
+                if (e.key === "Escape")
+                    document.getElementById("overlay").style.display = "none";
+            });
+
+            /* ── INIT ── */
+            loadAll();
+        </script>
+    </body>
+</html>

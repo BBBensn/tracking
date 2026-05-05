@@ -1,0 +1,25 @@
+server {
+    listen 80;
+    server_name tracking.bensn.me;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name tracking.bensn.me;
+
+    ssl_certificate     /etc/letsencrypt/live/tracking.bensn.me/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tracking.bensn.me/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+
+    root /var/www/tracking;
+    index index.html;
+
+    location /shared/ {
+        alias /var/www/shared/;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
