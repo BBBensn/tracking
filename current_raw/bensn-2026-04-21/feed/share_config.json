@@ -1,4 +1,0 @@
-{
-  "shared_types": ["diary", "mood", "reflexion", "reflexionen", "therapie", "schichten"],
-  "blocked_types": ["arbeit", "fits", "fit", "idea", "ideas", "project_log", "symptome", "symptom", "symptoms", "projectlog", "wortwurzel"]
-}
