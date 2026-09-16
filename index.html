@@ -163,6 +163,15 @@
             .item-card:hover {
                 border-color: var(--border-hover);
             }
+            /* Vorrat items are backgrounded — habit/counter tracking is the focus now */
+            .item-card.item-card-vorrat {
+                padding: 0.7rem 1.1rem;
+                opacity: 0.6;
+                border-left-color: var(--border) !important;
+            }
+            .item-card.item-card-vorrat:hover {
+                opacity: 1;
+            }
             .item-name {
                 font-family: "Syne", sans-serif;
                 font-size: 0.95rem;
@@ -321,9 +330,6 @@
                 margin-bottom: 0.75rem;
             }
             .history-entry {
-                display: flex;
-                align-items: center;
-                gap: 0.75rem;
                 padding: 0.6rem 0.9rem;
                 background: var(--surface);
                 border: 1px solid var(--border);
@@ -333,6 +339,40 @@
             }
             .history-entry:hover {
                 border-color: var(--border-hover);
+            }
+            .history-row {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+            }
+            .history-actions {
+                display: flex;
+                gap: 0.5rem;
+                margin-top: 0.5rem;
+            }
+            .btn-pill {
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                background: none;
+                border: 1px solid var(--border);
+                color: var(--muted);
+                padding: 6px 12px;
+                border-radius: 6px;
+                cursor: pointer;
+            }
+            .btn-pill:hover {
+                border-color: var(--border-hover);
+                color: var(--text);
+            }
+            .btn-pill.green {
+                border-color: rgba(74, 222, 128, 0.3);
+                color: var(--green);
+            }
+            .btn-pill.red {
+                border-color: rgba(255, 0, 81, 0.3);
+                color: var(--accent-red);
             }
             .history-time {
                 font-family: "DM Mono", monospace;
@@ -374,28 +414,6 @@
             .history-amount span {
                 color: var(--text);
                 font-weight: 500;
-            }
-            .history-delete {
-                width: 24px;
-                height: 24px;
-                background: none;
-                border: none;
-                color: rgba(255, 0, 81, 0.3);
-                cursor: pointer;
-                font-size: 14px;
-                padding: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: 5px;
-                transition:
-                    color 0.15s,
-                    background 0.15s;
-                flex-shrink: 0;
-            }
-            .history-delete:hover {
-                color: var(--accent-red);
-                background: rgba(255, 0, 81, 0.08);
             }
             .history-day-totals {
                 margin-top: 0.5rem;
@@ -1493,7 +1511,13 @@
                 };
 
                 _categories.forEach((cat) => {
-                    const items = cat.items || [];
+                    // Habit-tracker (zaehler) items are the focus — vorrat items are
+                    // backgrounded, so they sort after the counters within their category.
+                    const items = [...(cat.items || [])].sort(
+                        (a, b) =>
+                            (a.tracking_mode === "zaehler" ? 0 : 1) -
+                            (b.tracking_mode === "zaehler" ? 0 : 1),
+                    );
                     if (!items.length) return;
                     const colorClass = catColorClass(cat.color);
                     let catActivity = 0;
@@ -1530,7 +1554,7 @@
                             const dispHtml = vd
                                 ? `<div class="item-bestand"><span class="bestand-val">${fmtAmtWithPack(vd.bestand, item)}</span><span class="bestand-label">Bestand · ${localDateStr(vd.fillDate)}</span></div>`
                                 : `<div class="item-bestand"><span class="bestand-label">Kein Bestand eingetragen</span></div>`;
-                            itemsHtml += `<div class="item-card">
+                            itemsHtml += `<div class="item-card item-card-vorrat">
                                 <div>
                                     <div class="item-name">${item.name}</div>
                                     <div class="item-meta">Vorrat · ${item.base_unit}</div>
@@ -1567,7 +1591,7 @@
                                           ? `<div class="item-bestand"><span class="bestand-label" style="color:var(--orange)">⚠ Erst Anfangsbestand auffüllen (✎ Button)</span></div>`
                                           : `<div class="item-bestand"><span class="bestand-label">Kein Vorrat eingetragen</span></div>`;
                                   })();
-                            itemsHtml += `<div class="item-card">
+                            itemsHtml += `<div class="item-card item-card-vorrat">
                                 <div>
                                     <div class="item-name">${item.name}</div>
                                     <div class="item-meta">Vorrat · ${item.base_unit}</div>
@@ -1794,11 +1818,16 @@
                                 typeLabel = `<span class="history-type-badge zaehler">+${fmtAmt(eAmt, item)}</span>`;
                             }
                             return `<div class="history-entry">
-                            <span class="history-time">${localTimeStr(e.timestamp)}</span>
-                            <span class="history-name">${e.name}</span>
-                            ${typeLabel}
-                            <span class="history-amount">${e.note ? `<span style="color:var(--muted)">${e.note}</span>` : ""}</span>
-                            <button class="history-delete" onclick="deleteEntry('${e.id}')" title="Löschen">×</button>
+                            <div class="history-row">
+                                <span class="history-time">${localTimeStr(e.timestamp)}</span>
+                                <span class="history-name">${e.name}</span>
+                                ${typeLabel}
+                                <span class="history-amount">${e.note ? `<span style="color:var(--muted)">${e.note}</span>` : ""}</span>
+                            </div>
+                            <div class="history-actions">
+                                <button class="btn-pill" onclick="openEditEntrySheet('${e.id}')">Bearbeiten</button>
+                                <button class="btn-pill red" onclick="deleteEntry('${e.id}')">Löschen</button>
+                            </div>
                         </div>`;
                         })
                         .join("");
@@ -1809,11 +1838,12 @@
                             wtDay.shifts.map((s) => s.station).join(", ") ||
                             "Dienst";
                         wtRows += `<div class="history-entry" style="opacity:.7">
-                            <span class="history-time" style="color:var(--accent-blue)">WT</span>
-                            <span class="history-name">Spicy</span>
-                            <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
-                            <span class="history-amount"><span>${wtDay.spicy} Stk.</span> · ${src}</span>
-                            <span style="width:24px;flex-shrink:0"></span>
+                            <div class="history-row">
+                                <span class="history-time" style="color:var(--accent-blue)">WT</span>
+                                <span class="history-name">Spicy</span>
+                                <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
+                                <span class="history-amount"><span>${wtDay.spicy} Stk.</span> · ${src}</span>
+                            </div>
                         </div>`;
                     }
                     if (wtDay.blend > 0) {
@@ -1821,11 +1851,12 @@
                             wtDay.shifts.map((s) => s.station).join(", ") ||
                             "Dienst";
                         wtRows += `<div class="history-entry" style="opacity:.7">
-                            <span class="history-time" style="color:var(--accent-blue)">WT</span>
-                            <span class="history-name">Zigarette</span>
-                            <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
-                            <span class="history-amount"><span>${wtDay.blend} Stk.</span> · ${src}</span>
-                            <span style="width:24px;flex-shrink:0"></span>
+                            <div class="history-row">
+                                <span class="history-time" style="color:var(--accent-blue)">WT</span>
+                                <span class="history-name">Zigarette</span>
+                                <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
+                                <span class="history-amount"><span>${wtDay.blend} Stk.</span> · ${src}</span>
+                            </div>
                         </div>`;
                     }
 
@@ -2681,6 +2712,69 @@
                     await loadAll();
                 } catch (e) {
                     showToast("Fehler: " + e.message);
+                }
+            }
+
+            /* ════════════════════════════════════════════════════════════════
+   ENTRY EDIT SHEET (amount, note, Zeitpunkt — wie in health.bensn.me)
+   ════════════════════════════════════════════════════════════════ */
+            function isoToDatetimeLocal(iso) {
+                const d = new Date(iso);
+                const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+                return local.toISOString().slice(0, 16);
+            }
+
+            function openEditEntrySheet(entryId) {
+                const entry = _allEntries.find((e) => e.id === entryId);
+                if (!entry) return;
+                showSheet(`
+                    <div class="sheet-label">Eintrag</div>
+                    <div class="sheet-title">${entry.name}</div>
+                    <div class="sheet-row">
+                        <div class="sheet-label" style="margin-bottom:4px">Menge (${entry.unit})</div>
+                        <input class="sheet-input" id="ee-amount" type="number" step="any" value="${entry.amount}">
+                    </div>
+                    <div class="sheet-row">
+                        <div class="sheet-label" style="margin-bottom:4px">Notiz</div>
+                        <input class="sheet-input" id="ee-note" type="text" value="${entry.note ? entry.note.replace(/"/g, "&quot;") : ""}" placeholder="optional">
+                    </div>
+                    <div class="sheet-row">
+                        <div class="sheet-label" style="margin-bottom:4px">Zeitpunkt</div>
+                        <input class="sheet-input" id="ee-time" type="datetime-local" value="${isoToDatetimeLocal(entry.timestamp)}">
+                    </div>
+                    <div class="sheet-btns" style="margin-top:1rem">
+                        <button class="btn-save" onclick="saveEditedEntry('${entryId}')">Speichern</button>
+                        <button class="btn-cancel" onclick="closeSheet()">Abbrechen</button>
+                    </div>
+                    <div id="sheet-msg" style="font-family:'DM Mono',monospace;font-size:11px;margin-top:.5rem;text-align:center"></div>
+                `);
+            }
+
+            async function saveEditedEntry(entryId) {
+                const amount = parseFloat(document.getElementById("ee-amount").value);
+                const note = document.getElementById("ee-note").value.trim() || null;
+                const timeVal = document.getElementById("ee-time").value;
+                const msg = document.getElementById("sheet-msg");
+                if (!timeVal || isNaN(amount)) {
+                    msg.style.color = "var(--accent-red)";
+                    msg.textContent = "Menge und Zeitpunkt sind Pflicht";
+                    return;
+                }
+                msg.style.color = "var(--muted)";
+                msg.textContent = "Speichere…";
+                try {
+                    await apiFetch(`/api/tracking/entry/${entryId}`, "PATCH", {
+                        amount,
+                        note,
+                        timestamp: new Date(timeVal).toISOString(),
+                    });
+                    closeSheet();
+                    showToast("Gespeichert");
+                    await loadAll();
+                    renderVerlauf();
+                } catch (e) {
+                    msg.style.color = "var(--accent-red)";
+                    msg.textContent = "Fehler: " + e.message;
                 }
             }
 

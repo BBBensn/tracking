@@ -9,14 +9,17 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Habit-/Verbrauchstracker PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v1.5.0
+- **Version:** v1.6.0
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
 ## Zweck
 
-Config-getriebener Konsum-/Gewohnheits-Tracker: Redbull, Zigaretten, Weed, Kaffee, Papers/Filter.
-Keine Item-spezifische Logik im Code — alles läuft über `tracking_categories`/`tracking_items`
+Config-getriebener Habit-/Konsum-Tracker, Fokus auf Zähler-artigem Habit-Tracking: Redbull,
+Zigaretten/Spicy/Ofen, Weed, Tabak, Fun. Vorrat-Tracking (Bestand statt Konsum) ist seit v1.6.0
+bewusst Nebensache und nur noch für Kaffee aktiv — visuell zurückgestuft (siehe Konventionen).
+Medikamente werden seit v1.6.0 in `health.bensn.me` getrackt, nicht mehr hier. Keine
+Item-spezifische Logik im Code — alles läuft über `tracking_categories`/`tracking_items`
 (Admin-UI im "Einstellungen"-Tab), Einträge über `tracking_entries`.
 
 ---
@@ -81,11 +84,25 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
 
 ## Projekt-spezifische Konventionen
 
-- **Soft-delete:** `deleted = true` Spalte — nie physisch löschen
+- **Soft-delete:** `deleted = true` (Einträge) bzw. `active = false` (Items/Kategorien) —
+  nie physisch löschen, damit historische Verlaufs-Einträge (auch von längst deaktivierten
+  Items) korrekt lesbar bleiben
 - **Timestamps:** UTC ISO 8601 gespeichert, Anzeige in `Europe/Vienna`
 - **DB-Zugriffe (im hub-api-Code):** `db_query()` / `db_insert()` Helper — kein ORM
 - **Kein Item-spezifischer Code:** neue Konsum-Items/Kategorien werden ausschließlich über die
   Einstellungen-UI angelegt, nie hardcoded im Frontend
+- **`vorrat` vs. `zaehler`:** beide Tracking-Modi bleiben als Mechanismus bestehen (inkl.
+  `linked_items` Cross-Deduction), aber der Habit-Tracker-Fokus liegt seit v1.6.0 auf `zaehler`
+  (Konsum-Events zählen/summieren). `vorrat`-Items (Bestand, der schrumpft) werden in der
+  Heute-Ansicht bewusst ans Ende ihrer Kategorie sortiert und mit `.item-card-vorrat`
+  (reduzierte Opazität) visuell zurückgestuft — aktuell nur noch Kaffee
+- **Cross-App-Designsprache:** kleine Aktions-Buttons (Bearbeiten/Löschen) sind `.btn-pill`
+  (geborderte DM-Mono-Buttons) — identische Klasse wie in `health.bensn.me` und `feed.bensn.me`,
+  1:1 aus `worktracker`s Button-Stil übernommen. Kein Bare-Text-Link für Aktionen
+- **Eintrag bearbeiten:** jeder Verlaufs-Eintrag hat "Bearbeiten" (Menge/Notiz/Zeitpunkt in
+  einem Sheet, `openEditEntrySheet()`) und "Löschen" — Zeitpunkt-Änderung geht über
+  `PATCH /api/tracking/entry/<id>` mit `timestamp` (siehe `bensn-meta` API-Endpoints), `date`
+  wird dabei serverseitig aus `Europe/Vienna` neu berechnet, damit Tages-Summen/-Filter stimmen
 
 ---
 
@@ -97,7 +114,7 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
 | v1.3.0–v1.3.5 | Config-getriebene Tracking-Engine (Kategorien/Items/Einträge) | ✅ deployed |
 | v1.4.0–v1.4.3 | Bestand + Zähler, `linked_items` Cross-Deduction | ✅ deployed |
 | v1.5.0 | PWA: manifest.json + Service Worker | ✅ deployed |
-| — | Visuelle Politur der Kategorien-Gruppierung (rauchen/redbull) | ⬜ geplant |
+| v1.6.0 | Habit-Tracker-Fokus: Medikamente/Papes/Filter/Endless-Pape/Hybrid-Filter entfernt (Medikamente jetzt in `health.bensn.me`), Weed + Tabak von Vorrat auf Konsum-Tracker (Zähler) umgestellt, verwaiste `linked_items` bei Zigarette/Spicy/Ofen geleert, verbleibende Vorrat-Items (Kaffee) visuell zurückgestuft, jeder Verlaufs-Eintrag editierbar (Menge/Notiz/Zeitpunkt), `.btn-pill`-Design­sprache übernommen | ✅ deployed |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 
