@@ -895,16 +895,8 @@
             .sheet-input::placeholder {
                 color: var(--muted);
             }
-            .btn-danger {
-                font-family: "DM Mono", monospace;
-                font-size: 11px;
-                background: none;
-                border: 1px solid rgba(255, 0, 81, 0.3);
-                color: var(--accent-red);
-                border-radius: 8px;
-                padding: 11px 14px;
-                cursor: pointer;
-            }
+            /* .btn-danger removed — converged on .btn-pill.red (shared/bensn.css),
+               same destructive-in-sheet role as health.bensn.me now uses */
 
             /* ── Vorrat badge ── */
             .settings-item-mode.vorrat {
@@ -1961,7 +1953,7 @@
                     <div class="sheet-btns" style="margin-top:1rem">
                         <button class="btn-save" onclick="saveCat('${catId || ""}')">Speichern</button>
                         <button class="btn-cancel" onclick="closeSheet()">Abbrechen</button>
-                        ${cat ? `<button class="btn-danger" onclick="deleteCat('${catId}')">Löschen</button>` : ""}
+                        ${cat ? `<button class="btn-pill red" onclick="deleteCat('${catId}')">Löschen</button>` : ""}
                     </div>
                     <div id="sheet-msg" style="font-family:'DM Mono',monospace;font-size:11px;margin-top:.5rem;text-align:center"></div>
                 `);
@@ -2189,7 +2181,7 @@
                     <div class="sheet-btns" style="margin-top:1rem">
                         <button class="btn-save" onclick="saveItem('${itemId || ""}','${catId}')">Speichern</button>
                         <button class="btn-cancel" onclick="closeSheet()">Abbrechen</button>
-                        ${item ? `<button class="btn-danger" onclick="deleteItem('${itemId}')">Löschen</button>` : ""}
+                        ${item ? `<button class="btn-pill red" onclick="deleteItem('${itemId}')">Löschen</button>` : ""}
                     </div>
                     <div id="sheet-msg" style="font-family:'DM Mono',monospace;font-size:11px;margin-top:.5rem;text-align:center"></div>
                 `);

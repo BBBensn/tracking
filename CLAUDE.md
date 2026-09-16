@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Habit-/Verbrauchstracker PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v1.6.1
+- **Version:** v1.6.2
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -121,6 +121,7 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
 | v1.5.0 | PWA: manifest.json + Service Worker | ✅ deployed |
 | v1.6.0 | Habit-Tracker-Fokus: Medikamente/Papes/Filter/Endless-Pape/Hybrid-Filter entfernt (Medikamente jetzt in `health.bensn.me`), Weed + Tabak von Vorrat auf Konsum-Tracker (Zähler) umgestellt, verwaiste `linked_items` bei Zigarette/Spicy/Ofen geleert, verbleibende Vorrat-Items (Kaffee) visuell zurückgestuft, jeder Verlaufs-Eintrag editierbar (Menge/Notiz/Zeitpunkt), `.btn-pill`-Design­sprache übernommen | ✅ deployed |
 | v1.6.1 | `.btn-pill`/`.btn-save`/`.btn-cancel` aus lokalem CSS entfernt, kommen jetzt zentral aus `bensn-meta/shared/bensn.css` (dabei `.btn-cancel`-Padding-Abweichung auf den Standardwert angeglichen) — keine sichtbare Änderung außer diesem 2px-Fix | ✅ deployed (2026-09-16) |
+| v1.6.2 | `.btn-danger` entfernt, Kategorie-/Item-Löschen in den Einstellungen-Sheets nutzt jetzt `.btn-pill.red` — konvergiert mit health.bensn.mes Löschen-Buttons in Sheets | ✅ deployed (2026-09-16) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 
