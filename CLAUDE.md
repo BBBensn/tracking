@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Habit-/Verbrauchstracker PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v1.6.0
+- **Version:** v1.6.1
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -98,7 +98,12 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
   (reduzierte Opazität) visuell zurückgestuft — aktuell nur noch Kaffee
 - **Cross-App-Designsprache:** kleine Aktions-Buttons (Bearbeiten/Löschen) sind `.btn-pill`
   (geborderte DM-Mono-Buttons) — identische Klasse wie in `health.bensn.me` und `feed.bensn.me`,
-  1:1 aus `worktracker`s Button-Stil übernommen. Kein Bare-Text-Link für Aktionen
+  1:1 aus `worktracker`s Button-Stil übernommen. Kein Bare-Text-Link für Aktionen.
+  `.btn-pill`/`.btn-save`/`.btn-cancel` liegen seit 2026-09-16 zentral in
+  `bensn-meta/shared/bensn.css` (vorher hier lokal dupliziert, u.a. mit einem abweichenden
+  `.btn-cancel`-Padding — beim Zentralisieren auf den in health/feed üblichen Wert
+  angeglichen) — hier lokal NICHT mehr neu definieren. Vollständiger Style-Guide (alle
+  Farben/Komponenten live + bekannte Inkonsistenzen): `bensn-meta/design-system.html`
 - **Eintrag bearbeiten:** jeder Verlaufs-Eintrag hat "Bearbeiten" (Menge/Notiz/Zeitpunkt in
   einem Sheet, `openEditEntrySheet()`) und "Löschen" — Zeitpunkt-Änderung geht über
   `PATCH /api/tracking/entry/<id>` mit `timestamp` (siehe `bensn-meta` API-Endpoints), `date`
@@ -115,6 +120,7 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
 | v1.4.0–v1.4.3 | Bestand + Zähler, `linked_items` Cross-Deduction | ✅ deployed |
 | v1.5.0 | PWA: manifest.json + Service Worker | ✅ deployed |
 | v1.6.0 | Habit-Tracker-Fokus: Medikamente/Papes/Filter/Endless-Pape/Hybrid-Filter entfernt (Medikamente jetzt in `health.bensn.me`), Weed + Tabak von Vorrat auf Konsum-Tracker (Zähler) umgestellt, verwaiste `linked_items` bei Zigarette/Spicy/Ofen geleert, verbleibende Vorrat-Items (Kaffee) visuell zurückgestuft, jeder Verlaufs-Eintrag editierbar (Menge/Notiz/Zeitpunkt), `.btn-pill`-Design­sprache übernommen | ✅ deployed |
+| v1.6.1 | `.btn-pill`/`.btn-save`/`.btn-cancel` aus lokalem CSS entfernt, kommen jetzt zentral aus `bensn-meta/shared/bensn.css` (dabei `.btn-cancel`-Padding-Abweichung auf den Standardwert angeglichen) — keine sichtbare Änderung außer diesem 2px-Fix | ✅ deployed (2026-09-16) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 

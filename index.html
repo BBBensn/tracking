@@ -350,30 +350,7 @@
                 gap: 0.5rem;
                 margin-top: 0.5rem;
             }
-            .btn-pill {
-                font-family: "DM Mono", monospace;
-                font-size: 10px;
-                letter-spacing: 0.08em;
-                text-transform: uppercase;
-                background: none;
-                border: 1px solid var(--border);
-                color: var(--muted);
-                padding: 6px 12px;
-                border-radius: 6px;
-                cursor: pointer;
-            }
-            .btn-pill:hover {
-                border-color: var(--border-hover);
-                color: var(--text);
-            }
-            .btn-pill.green {
-                border-color: rgba(74, 222, 128, 0.3);
-                color: var(--green);
-            }
-            .btn-pill.red {
-                border-color: rgba(255, 0, 81, 0.3);
-                color: var(--accent-red);
-            }
+            /* .btn-pill now lives in the shared /shared/bensn.css — one definition for all apps */
             .history-time {
                 font-family: "DM Mono", monospace;
                 font-size: 10px;
@@ -569,29 +546,9 @@
                 display: flex;
                 gap: 0.5rem;
             }
-            .btn-save {
-                flex: 1;
-                font-family: "DM Mono", monospace;
-                font-size: 11px;
-                font-weight: 500;
-                letter-spacing: 0.06em;
-                background: var(--green);
-                color: #0a0a0b;
-                border: none;
-                border-radius: 8px;
-                padding: 11px;
-                cursor: pointer;
-            }
-            .btn-cancel {
-                font-family: "DM Mono", monospace;
-                font-size: 11px;
-                background: none;
-                border: 1px solid var(--border);
-                color: var(--muted);
-                border-radius: 8px;
-                padding: 11px 18px;
-                cursor: pointer;
-            }
+            /* .btn-save / .btn-cancel now live in the shared /shared/bensn.css
+               (tracking's .btn-cancel used 18px horizontal padding vs 16px in
+               health/feed — converged to the shared 16px value) */
 
             /* ── Toast ── */
             .toast {
