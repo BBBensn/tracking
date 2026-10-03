@@ -136,7 +136,7 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
     <div id="statsContent"><div class="state-msg">Statistik wird geladen…</div></div>
 `;
 
-function build(core) {
+function build(core, root) {
 
   // Doppel-Submit-Schutz: verhindert doppelt angelegte Pausen bei Doppel-Tap
   // oder langsamer Verbindung (Ursache historischer Duplikate)
@@ -746,7 +746,7 @@ function build(core) {
       </div>`;
 
     overlay.addEventListener('click', () => overlay.remove());
-    document.body.appendChild(overlay);
+    root.appendChild(overlay);   // im Modul-Container (nicht <body>), damit Modul-Styles greifen
   }
 
   function toggleAbType(el, val) {
@@ -927,7 +927,7 @@ function build(core) {
       overlay.dataset.baseDate = toLocalISO(b.break_start).split('T')[0];
     });
 
-    document.body.appendChild(overlay);
+    root.appendChild(overlay);   // im Modul-Container (nicht <body>), damit Modul-Styles greifen
   }
 
   function adjustBE(type, delta) {
@@ -1201,7 +1201,7 @@ export default {
     styleEl.textContent = CSS;
     document.head.append(styleEl);
     root.innerHTML = TEMPLATE;
-    instance = build(core);
+    instance = build(core, root);
     await instance.init();
   },
   unmount() {

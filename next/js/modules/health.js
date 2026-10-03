@@ -145,7 +145,6 @@ const CSS = `.m-health {
       .entry-dot.med { background: var(--accent-blue); }
       .entry-dot.bp { background: var(--accent-red); }
       .entry-dot.weight { background: var(--orange); }
-      .entry-dot.meal { background: var(--green); }
       .entry-dot.oura { background: var(--accent-blue); }
       .entry-main { flex: 1; min-width: 0; }
       .entry-title { font-family: "Syne", sans-serif; font-weight: 700; font-size: 0.9rem; }
@@ -222,7 +221,6 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
         <div class="quick-grid" style="margin-top: 1.25rem">
           <button class="quick-btn" onclick="HL.openSheet('bp')"><span class="icon">❤️</span><span class="label">Blutdruck</span></button>
           <button class="quick-btn" onclick="HL.openSheet('weight')"><span class="icon">⚖️</span><span class="label">Gewicht</span></button>
-          <button class="quick-btn" onclick="HL.openSheet('meal')"><span class="icon">🍽</span><span class="label">Mahlzeit</span></button>
         </div>
       </div>
 
@@ -281,10 +279,6 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
             <div class="stat-value" id="statHr">–</div>
             <div class="stat-sub" id="statHrSub">keine Daten</div>
             <svg class="sparkline" id="sparkHr"></svg>
-          </div>
-          <div class="stat-card" style="cursor: pointer" onclick="HL.openHistoryModal('meals')">
-            <div class="stat-label">Mahlzeiten heute</div>
-            <div class="stat-value" id="statMeals">–</div>
           </div>
         </div>
       </div>
@@ -402,27 +396,6 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
       </div>
     </div>
 
-    <!-- ═══ SHEET: MAHLZEIT ═══ -->
-    <div class="overlay" id="sheetMeal" onclick="if(event.target===this) HL.closeSheet('meal')">
-      <div class="overlay-sheet">
-        <div class="sheet-title">Mahlzeit</div>
-        <div class="tag-picker">
-          <button class="tag-btn" onclick="HL.setMealLabel('Frühstück', this)">Frühstück</button>
-          <button class="tag-btn" onclick="HL.setMealLabel('Mittag', this)">Mittag</button>
-          <button class="tag-btn" onclick="HL.setMealLabel('Abend', this)">Abend</button>
-          <button class="tag-btn" onclick="HL.setMealLabel('Snack', this)">Snack</button>
-        </div>
-        <input type="hidden" id="mealLabel" value="" />
-        <div class="sheet-label">Zeitpunkt</div>
-        <div class="input-row"><input type="datetime-local" id="mealDatetime" style="width:100%"></div>
-        <textarea class="note-input" id="mealDescription" placeholder="Was gab's? (optional)"></textarea>
-        <div class="sheet-btns">
-          <button class="btn-cancel" onclick="HL.closeSheet('meal')">Abbrechen</button>
-          <button class="btn-save" onclick="HL.saveMeal()">Speichern</button>
-        </div>
-      </div>
-    </div>
-
     <!-- ═══ SHEET: DASHBOARD-VERLAUF (History-Modal je Kachel) ═══ -->
     <div class="overlay" id="sheetHistory" onclick="if(event.target===this) HL.closeSheet('history')">
       <div class="overlay-sheet" style="max-height: 80vh; display: flex; flex-direction: column">
@@ -495,13 +468,6 @@ function build(core) {
         const i = _selectedNoteEffects.indexOf(tag);
         if (i >= 0) { _selectedNoteEffects.splice(i, 1); btn.classList.remove("active"); }
         else { _selectedNoteEffects.push(tag); btn.classList.add("active"); }
-      }
-
-      let _mealLabel = "";
-      function setMealLabel(label, btn) {
-        _mealLabel = label;
-        btn.parentElement.querySelectorAll(".tag-btn").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
       }
 
       /* ════════════ SAVE ACTIONS ════════════ */
@@ -650,16 +616,6 @@ function build(core) {
         document.getElementById("weightNote").value = "";
       }
 
-      async function saveMeal() {
-        await apiFetch("/api/meal", "POST", {
-          label: _mealLabel || null,
-          eaten_at: toIsoOrNull(document.getElementById("mealDatetime").value),
-          description: document.getElementById("mealDescription").value || null,
-        });
-        closeSheet("meal");
-        document.getElementById("mealDescription").value = "";
-      }
-
       /* ════════════ LOAD: MEDICATIONS (Heute-Checkliste + Medikamente-Tab) ════════════ */
       async function loadMedChecklist() {
         const dailyEl = document.getElementById("medChecklistDaily");
@@ -790,13 +746,12 @@ function build(core) {
       async function loadVerlauf() {
         const el = document.getElementById("verlaufList");
         el.innerHTML = '<div class="empty-state">Lädt…</div>';
-        let meds, bps, weights, meals;
+        let meds, bps, weights;
         try {
-          [meds, bps, weights, meals] = await Promise.all([
+          [meds, bps, weights] = await Promise.all([
             apiFetch("/api/medication-logs?limit=50"),
             apiFetch("/api/bp-logs?limit=50"),
             apiFetch("/api/weight-logs?limit=50"),
-            apiFetch("/api/meals?limit=50"),
           ]);
         } catch (e) {
           el.innerHTML = `<div class="empty-state">API nicht erreichbar · ${e.message}</div>`;
@@ -823,10 +778,6 @@ function build(core) {
           ...weights.map((w) => {
             _verlaufDataById[w.id] = { weight_kg: w.weight_kg, notes: w.notes };
             return { type: "weight", id: w.id, time: w.measured_at, title: `${w.weight_kg} kg`, sub: w.notes || "" };
-          }),
-          ...meals.map((m) => {
-            _verlaufDataById[m.id] = { label: m.label, description: m.description };
-            return { type: "meal", id: m.id, time: m.eaten_at, title: m.label || "Mahlzeit", sub: m.description || "" };
           }),
         ].sort((a, b) => new Date(b.time) - new Date(a.time));
 
@@ -877,12 +828,11 @@ function build(core) {
         );
       }
 
-      /* ════════════ EDIT-TIME / DELETE (Medikamente, BP, Gewicht, Mahlzeit, Beobachtungen) ════════════ */
+      /* ════════════ EDIT-TIME / DELETE (Medikamente, BP, Gewicht, Beobachtungen) ════════════ */
       const ENTRY_API_MAP = {
         med: { url: (id) => `/api/medication-log/${id}`, timeField: "taken_at" },
         bp: { url: (id) => `/api/bp/${id}`, timeField: "measured_at" },
         weight: { url: (id) => `/api/weight/${id}`, timeField: "measured_at" },
-        meal: { url: (id) => `/api/meal/${id}`, timeField: "eaten_at" },
         note: { url: (id) => `/api/medication-log-note/${id}`, timeField: "noted_at" },
       };
       let _editTimeType = null, _editTimeId = null;
@@ -919,14 +869,9 @@ function build(core) {
       /* ════════════ EINTRAG BEARBEITEN (Verlauf — Zeit, Anzahl, Notiz-Inhalt, Löschen) ════════════ */
       const EDIT_ENTRY_TITLES = {
         med: "Einnahme bearbeiten", bp: "Blutdruck bearbeiten",
-        weight: "Gewicht bearbeiten", meal: "Mahlzeit bearbeiten", note: "Beobachtung bearbeiten",
+        weight: "Gewicht bearbeiten", note: "Beobachtung bearbeiten",
       };
-      let _editEntryType = null, _editEntryId = null, _editEntryCount = 1, _editEntryMealLabel = "";
-      function setEditEntryMealLabel(label, btn) {
-        _editEntryMealLabel = label;
-        btn.parentElement.querySelectorAll(".tag-btn").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-      }
+      let _editEntryType = null, _editEntryId = null, _editEntryCount = 1;
 
       function openEditEntrySheet(type, id, currentIso) {
         _editEntryType = type; _editEntryId = id;
@@ -969,16 +914,6 @@ function build(core) {
             <div class="input-row"><input type="number" id="editEntryWeightKg" step="0.1" placeholder="Gewicht" value="${data.weight_kg ?? ""}" /><span class="input-unit">kg</span></div>
             <div class="sheet-label">Notiz</div>
             <textarea class="note-input" id="editEntryNotes">${data.notes || ""}</textarea>`;
-        } else if (type === "meal") {
-          _editEntryMealLabel = data.label || "";
-          fieldsEl.innerHTML = `
-            <div class="tag-picker" id="editEntryMealLabelTags">
-              ${["Frühstück", "Mittag", "Abend", "Snack"].map((l) =>
-                `<button type="button" class="tag-btn${_editEntryMealLabel === l ? " active" : ""}" onclick="HL.setEditEntryMealLabel('${l}', this)">${l}</button>`
-              ).join("")}
-            </div>
-            <div class="sheet-label">Beschreibung</div>
-            <textarea class="note-input" id="editEntryDescription">${data.description || ""}</textarea>`;
         } else {
           fieldsEl.innerHTML = "";
         }
@@ -1017,9 +952,6 @@ function build(core) {
           if (!weightKg) return alert("Gewicht angeben");
           body.weight_kg = weightKg;
           body.notes = document.getElementById("editEntryNotes").value || null;
-        } else if (_editEntryType === "meal") {
-          body.label = _editEntryMealLabel || null;
-          body.description = document.getElementById("editEntryDescription").value || null;
         }
         await apiFetch(map.url(_editEntryId), "PATCH", body);
 
@@ -1127,7 +1059,6 @@ function build(core) {
             drawSparkline("sparkHr", withResting.map((h) => h.resting_bpm).reverse(), "var(--accent-blue)");
           }
         }
-        document.getElementById("statMeals").textContent = d.meals_today;
       }
 
       /* ════════════ LOAD: OURA ════════════ */
@@ -1212,12 +1143,6 @@ function build(core) {
           dateField: (r) => r.measured_at,
           row: (r) => ({ dot: "weight", time: fmtTime(r.measured_at), title: `${r.weight_kg} kg`, sub: r.notes || "" }),
         },
-        meals: {
-          title: "Mahlzeiten · Verlauf",
-          load: () => apiFetch("/api/meals?limit=50"),
-          dateField: (r) => r.eaten_at,
-          row: (r) => ({ dot: "meal", time: fmtTime(r.eaten_at), title: r.label || "Mahlzeit", sub: r.description || "" }),
-        },
         sleep: {
           title: "Schlaf · Verlauf",
           load: async () => (await apiFetch("/api/oura/sleep?days=30")).sleep,
@@ -1287,7 +1212,7 @@ function build(core) {
       /* ════════════ INIT ════════════ */
       async function init() { await loadMedChecklist(); }
 
-  window.HL = { switchTab, openSheet, closeSheet, capitalize, setYesNoToggle, renderEffectTagsInto, toggleNoteEffect, setMealLabel, toggleMedSelect, renderMedConfirmBar, stepMedConfirmCount, cancelMedSelection, confirmMedSelection, openMedCreateSheet, toggleNewMedPrn, saveNewMed, endMedication, openMedNoteSheet, saveMedNote, saveBp, saveWeight, saveMeal, loadMedChecklist, renderMedChecklistDOM, renderMedChecklistRow, loadMedProfiles, renderMedProfileCard, deleteMedication, fmtDate, loadVerlauf, openEditTimeSheet, saveEditedTime, setEditEntryMealLabel, openEditEntrySheet, stepEditEntryCount, saveEditEntry, deleteEditEntry, fmtTime, dayKeyVienna, dayLabelFor, groupByDayHtml, loadDashboard, loadOura, openHistoryModal, drawSparkline, init };
+  window.HL = { switchTab, openSheet, closeSheet, capitalize, setYesNoToggle, renderEffectTagsInto, toggleNoteEffect, toggleMedSelect, renderMedConfirmBar, stepMedConfirmCount, cancelMedSelection, confirmMedSelection, openMedCreateSheet, toggleNewMedPrn, saveNewMed, endMedication, openMedNoteSheet, saveMedNote, saveBp, saveWeight, loadMedChecklist, renderMedChecklistDOM, renderMedChecklistRow, loadMedProfiles, renderMedProfileCard, deleteMedication, fmtDate, loadVerlauf, openEditTimeSheet, saveEditedTime, openEditEntrySheet, stepEditEntryCount, saveEditEntry, deleteEditEntry, fmtTime, dayKeyVienna, dayLabelFor, groupByDayHtml, loadDashboard, loadOura, openHistoryModal, drawSparkline, init };
   return { init };
 }
 

@@ -5,6 +5,7 @@
 //  - Beim Verlassen: Tastatur-Listener, Toast-Timer und das an <body> gehängte Sheet werden
 //    aufgeräumt (dispose). Kopfzeile/Status/Footer/SW-Registrierung entfallen (macht die Shell).
 //  - Red Bull, Holy und Kaffee sind seit 2026-10-03 nach Food migriert (tracking_items inaktiv).
+//  - Arbeits-Zigaretten kommen mit EINER Abfrage (/api/smoke-breaks) und stehen je Pause chronologisch im Verlauf.
 
 const CSS = `.m-habits {
             /* ── Tabs ── */
@@ -946,7 +947,7 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
 
         `;
 
-function build(core) {
+function build(core, root) {
 
             /* ════════════════════════════════════════════════════════════════
    API
@@ -1201,54 +1202,39 @@ function build(core) {
    ════════════════════════════════════════════════════════════════ */
             async function loadAll() {
                 try {
-                    const [catData, trackingData, shiftsData] =
+                    const [catData, trackingData, smokeData] =
                         await Promise.all([
                             apiFetch("/api/tracking/categories"),
                             apiFetch("/api/tracking/entries?limit=500"),
-                            apiFetch("/api/shifts?limit=100"),
+                            apiFetch("/api/smoke-breaks?days=730"),
                         ]);
                     _categories = catData.categories || [];
                     _allEntries = trackingData.entries || [];
 
-                    const shifts = shiftsData.shifts || shiftsData || [];
+                    // Arbeits-Zigaretten je Pause (mit Zeitstempel), nach Kalendertag der PAUSE
+                    // gruppiert — Pausen nach Mitternacht in Nachtdiensten zählen so zum
+                    // richtigen Tag. `breaks` hält die einzelnen Pausen fürs chronologische
+                    // Einsortieren im Verlauf, `shifts` die Summen je Station.
                     const newWt = {};
-                    await Promise.all(
-                        shifts.map(async (s) => {
-                            try {
-                                const detail = await apiFetch(
-                                    `/api/shift/${s.id}`,
-                                );
-                                const breaks = detail.breaks || [];
-                                const sSpicy = breaks.reduce(
-                                    (a, b) => a + (b.zig_spicy || 0),
-                                    0,
-                                );
-                                const sBlend = breaks.reduce(
-                                    (a, b) => a + (b.zig_blend || 0),
-                                    0,
-                                );
-                                if (!sSpicy && !sBlend) return;
-                                const dk = new Date(
-                                    s.work_start,
-                                ).toLocaleDateString("en-CA", {
-                                    timeZone: "Europe/Vienna",
-                                });
-                                if (!newWt[dk])
-                                    newWt[dk] = {
-                                        spicy: 0,
-                                        blend: 0,
-                                        shifts: [],
-                                    };
-                                newWt[dk].spicy += sSpicy;
-                                newWt[dk].blend += sBlend;
-                                newWt[dk].shifts.push({
-                                    station: s.station,
-                                    spicy: sSpicy,
-                                    blend: sBlend,
-                                });
-                            } catch (_) {}
-                        }),
-                    );
+                    (smokeData.breaks || []).forEach((b) => {
+                        const dk = core.dayKey(b.break_start);
+                        const day = (newWt[dk] ||= {
+                            spicy: 0,
+                            blend: 0,
+                            shifts: [],
+                            breaks: [],
+                        });
+                        day.spicy += b.zig_spicy || 0;
+                        day.blend += b.zig_blend || 0;
+                        day.breaks.push(b);
+                        let st = day.shifts.find((x) => x.station === b.station);
+                        if (!st)
+                            day.shifts.push(
+                                (st = { station: b.station, spicy: 0, blend: 0 }),
+                            );
+                        st.spicy += b.zig_spicy || 0;
+                        st.blend += b.zig_blend || 0;
+                    });
                     _wtByDate = newWt;
                     _activeDay = null;
                     _apiOnline = true;
@@ -1542,6 +1528,7 @@ function build(core) {
                         spicy: 0,
                         blend: 0,
                         shifts: [],
+                        breaks: [],
                     };
 
                     const zaehlerTotals = {};
@@ -1576,8 +1563,9 @@ function build(core) {
                         })
                         .join("");
 
-                    const entryRows = entries
-                        .map((e) => {
+                    // Eigene Einträge und Arbeits-Zigaretten (je Pause) in EINER Zeitreihe, neueste
+                    // zuerst: jede Zeile trägt ihren Zeitstempel zum Einsortieren.
+                    const rows = entries.map((e) => {
                             const item = itemById(e.item_id);
                             let typeLabel;
                             const eAmt = parseFloat(e.amount) || 0;
@@ -1595,7 +1583,9 @@ function build(core) {
                             } else {
                                 typeLabel = `<span class="history-type-badge zaehler">+${fmtAmt(eAmt, item)}</span>`;
                             }
-                            return `<div class="history-entry">
+                            return {
+                                ts: e.timestamp,
+                                html: `<div class="history-entry">
                             <div class="history-row">
                                 <span class="history-time">${localTimeStr(e.timestamp)}</span>
                                 <span class="history-name">${e.name}</span>
@@ -1606,42 +1596,34 @@ function build(core) {
                                 <button class="btn-pill" onclick="HB.openEditEntrySheet('${e.id}')">Bearbeiten</button>
                                 <button class="btn-pill red" onclick="HB.deleteEntry('${e.id}')">Löschen</button>
                             </div>
-                        </div>`;
-                        })
-                        .join("");
+                        </div>`,
+                            };
+                    });
 
-                    let wtRows = "";
-                    if (wtDay.spicy > 0) {
-                        const src =
-                            wtDay.shifts.map((s) => s.station).join(", ") ||
-                            "Dienst";
-                        wtRows += `<div class="history-entry" style="opacity:.7">
+                    // Zigaretten aus dem Arbeitstracker: eine Zeile je Pause und Sorte, mit der
+                    // Uhrzeit der Pause (nur lesbar, Bearbeiten geht im Work-Modul)
+                    (wtDay.breaks || []).forEach((b) => {
+                        [
+                            ["Spicy", b.zig_spicy],
+                            ["Zigarette", b.zig_blend],
+                        ].forEach(([name, n]) => {
+                            if (!n) return;
+                            rows.push({
+                                ts: b.break_start,
+                                html: `<div class="history-entry" style="opacity:.7">
                             <div class="history-row">
-                                <span class="history-time" style="color:var(--accent-blue)">WT</span>
-                                <span class="history-name">Spicy</span>
+                                <span class="history-time">${localTimeStr(b.break_start)}</span>
+                                <span class="history-name">${name}</span>
                                 <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
-                                <span class="history-amount"><span>${wtDay.spicy} Stk.</span> · ${src}</span>
+                                <span class="history-amount"><span>${n} Stk.</span> · ${b.station || "Dienst"}</span>
                             </div>
-                        </div>`;
-                    }
-                    if (wtDay.blend > 0) {
-                        const src =
-                            wtDay.shifts.map((s) => s.station).join(", ") ||
-                            "Dienst";
-                        wtRows += `<div class="history-entry" style="opacity:.7">
-                            <div class="history-row">
-                                <span class="history-time" style="color:var(--accent-blue)">WT</span>
-                                <span class="history-name">Zigarette</span>
-                                <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
-                                <span class="history-amount"><span>${wtDay.blend} Stk.</span> · ${src}</span>
-                            </div>
-                        </div>`;
-                    }
-
-                    const totalEntries =
-                        entries.length +
-                        (wtDay.spicy > 0 ? 1 : 0) +
-                        (wtDay.blend > 0 ? 1 : 0);
+                        </div>`,
+                            });
+                        });
+                    });
+                    rows.sort((x, y) => new Date(y.ts) - new Date(x.ts));
+                    const entryRows = rows.map((r) => r.html).join("");
+                    const totalEntries = rows.length;
                     container.innerHTML += `<div class="history-day">
                         <div class="day-header">
                             <span class="day-label">${dateLabelFor(date)}</span>
@@ -1649,7 +1631,7 @@ function build(core) {
                             <div class="day-line"></div>
                             ${totalBadges ? `<div style="display:flex;gap:.35rem;flex-wrap:wrap">${totalBadges}</div>` : ""}
                         </div>
-                        ${entryRows}${wtRows}
+                        ${entryRows}
                     </div>`;
                 });
             }
@@ -2189,7 +2171,8 @@ function build(core) {
                     "position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:flex;align-items:flex-end;justify-content:center;";
                 overlay.innerHTML = `<div onclick="event.stopPropagation()" style="background:#161616;border:1px solid rgba(255,255,255,.12);border-radius:16px 16px 0 0;padding:1.5rem 1.25rem 2.5rem;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">${html}</div>`;
                 overlay.addEventListener("click", closeSheet);
-                document.body.appendChild(overlay);
+                // Im Modul-Container, NICHT an <body>: das Modul-CSS (.m-habits …) greift nur darin
+                root.appendChild(overlay);
             }
             function closeSheet() {
                 document.getElementById("sheet-edit-overlay")?.remove();
@@ -2619,7 +2602,7 @@ export default {
     styleEl.textContent = CSS;
     document.head.append(styleEl);
     root.innerHTML = TEMPLATE;
-    instance = build(core);
+    instance = build(core, root);
     await instance.init();
   },
   unmount() {

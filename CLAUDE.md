@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Habit-/Verbrauchstracker PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v1.10.0 (Gesamt-App-Vorschau unter /next/; Live-App unter / ist noch die alte)
+- **Version:** v1.11.0 (Gesamt-App-Vorschau unter /next/; Live-App unter / ist noch die alte)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -153,6 +153,15 @@ Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammeng
 - **Red Bull, Holy, Kaffee** gehören seit 2026-10-03 zu Food, nicht mehr zu Habits: die
   Tracking-Items sind deaktiviert (verschwinden aus Alt-App und Modul), die Historie wurde nach
   Food kopiert (Details und Rückweg: `health/migrations/`, `health/CLAUDE.md`)
+- **Overlays/Sheets gehören IN den Modul-Container** (`root.appendChild`), nie an `<body>`: das
+  Modul-CSS steht als `.m-<id> { … }` und greift nur innerhalb. Wer ein Sheet per
+  `document.body.appendChild` einhängt, bekommt ungestylte Felder (so geschehen im Habits-
+  Bearbeiten-Sheet). `build(core, root)` reicht den Container durch
+- **Arbeits-Zigaretten** in Habits kommen aus `GET /api/smoke-breaks` (eine Abfrage, je Pause mit
+  Zeitstempel) und stehen im Verlauf chronologisch zwischen den eigenen Einträgen. NIE wieder
+  "Schichtliste + je Schicht Details" laden (waren 101 Requests, die Ladezeit)
+- **Jeder Tracker hat seinen eigenen Verlauf, im Feed läuft alles zusammen**: Mahlzeiten und
+  Getränke leben nur in Food (Health zeigt sie nicht mehr)
 - **Habits** (`habits.js`, Konverter-Port aus der Alt-App): Namespace `window.HB`, `dispose()`
   entfernt den Tastatur-Listener, den Toast-Timer und das an `<body>` gehängte Sheet
   (`#sheet-edit-overlay`). Der frühere Client-seitige API-Key entfällt (Cookie-Auth über
@@ -177,7 +186,8 @@ Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder lösche
 
 **Phasen:** ✅ 0 Backup-Cron · ✅ 1 Shell + Modul Health (Vorschau `/next/`) ·
 🟡 2 Food (Modul in der Vorschau, Getränke migriert, kcal im Feed ✅; offen: Katalogwerte vom Nutzer prüfen lassen, Backfill der Alt-Mahlzeiten, Zutaten-basierte Gerichte mit Gramm-Angaben + Basis-Gemüse/Obst-Katalog + Scan von Packungswerten) ·
-🟡 3 Habits (Modul in der Vorschau, Schreib-Pfade geprüft) · 🟡 4 Arbeit (Modul in der Vorschau, Schreib-Flows noch an einer echten Schicht zu prüfen) ·
+🟡 3 Habits (Modul in der Vorschau, Schreib-Pfade geprüft, schnell geladen, Arbeits-Zigaretten chronologisch) ·
+⬜ 3b Einheitlicher Verlauf für alle Tracker (einklappbare Monate wie im Worktracker + Kalenderansicht, siehe Vorschlag) · 🟡 4 Arbeit (Modul in der Vorschau, Schreib-Flows noch an einer echten Schicht zu prüfen) ·
 ⬜ 5 Cutover (`next/` → Root, alte Vhosts leiten um, neuer Service Worker, Feed-Anpassung) ·
 ⬜ 6 Sport · ⬜ Wisch-Gesten zwischen den Sub-Tabs eines Trackers (Randbereiche und horizontal scrollbare Elemente ausnehmen) · ⬜ Eingabe-Seite des Worktrackers als Sheet übernehmen (bis dahin Link auf worktracker.bensn.me/eingabe) · ⬜ Kurzbefehle/Quick-Log-API mit eigenen Tokens (danach)
 
@@ -197,6 +207,7 @@ Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder lösche
 | v1.8.0 | Gesamt-App-Vorschau: Modul **Work** (aus worktracker.bensn.me übernommen; Pausen-Overlay/Intervalle werden beim Verlassen aufgeräumt, `--orange` nur im Modul pink-rot), sticky Sub-Navigation mit Blur, kürzere Tab-Labels | ✅ deployed (2026-10-03) |
 | v1.9.0 | Gesamt-App-Vorschau: Modul **Food** (Katalog, Vorlagen, Mahlzeiten mit Nährwerten, Tagessummen mit Zucker-/Koffein-Richtwerten, Warenkorb-Eintragen, Bearbeiten, Katalog-/Vorlagen-Editor); gemeinsame Sheet-/Formular-Komponenten nach `app.css`; `core` um `esc`/`dayLabel`/`fmtClock` erweitert | ✅ deployed (2026-10-03) |
 | v1.10.0 | Gesamt-App-Vorschau: Modul **Habits** (aus tracking.bensn.me übernommen: Zähler, Vorrat, Verlauf, Einstellungen, Arbeits-Verknüpfung); Red Bull/Holy/Kaffee nach Food migriert; Sub-Nav-Abstand oben wieder 1,25 rem (war beim Umbau auf sticky versehentlich auf 0,5 rem geschrumpft) | ✅ deployed (2026-10-03) |
+| v1.11.0 | Gesamt-App-Vorschau: Mahlzeiten aus dem Health-Modul entfernt (Heute-Button, Verlauf, Dashboard-Kachel, Bearbeiten) — Food/Getränke nur noch in Food; Habits lädt mit 3 statt 104 Requests (`/api/smoke-breaks`, ~0,3 s); Arbeits-Zigaretten stehen je Pause chronologisch im Habits-Verlauf; Habits-Bearbeiten-Sheet war ungestylt (Overlay hing an `<body>` außerhalb des Modul-CSS), Work-Overlays ebenfalls in den Modul-Container verlegt | ✅ deployed (2026-10-04) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 
