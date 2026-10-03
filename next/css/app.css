@@ -84,7 +84,7 @@ body { overscroll-behavior: none; }
 .subnav {
   position: sticky; top: 0; z-index: 20;
   margin: 0 -1.25rem 1rem;
-  padding: calc(var(--safe-t) + 0.5rem) 1.25rem 0;
+  padding: calc(var(--safe-t) + 1.25rem) 1.25rem 0;
   background: rgba(10, 10, 11, 0.55);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
   backdrop-filter: blur(18px) saturate(1.4);

@@ -184,9 +184,7 @@ function build(core, root) {
   function renderHeute() {
     const today = core.todayKey();
     const day = st.summary.find((d) => d.day === today) || { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, sugar_g: 0, caffeine_mg: 0 };
-    // Red Bull etc. wird noch im Tracking erfasst und hier über tracking_name mitgezählt —
-    // als Kachel würde es doppelt zählen.
-    const favs = st.foods.filter((f) => !f.tracking_name && (st.kind === "all" || f.kind === st.kind));
+    const favs = st.foods.filter((f) => st.kind === "all" || f.kind === st.kind);
     const todays = st.meals.filter((m) => core.dayKey(m.eaten_at) === today);
     $("fd-heute").innerHTML = `
       <div class="fd-sum">
@@ -195,7 +193,6 @@ function build(core, root) {
           <div class="fd-macros"><span><b>${n0(day.protein_g)}</b> g Eiweiß</span><span><b>${n0(day.carbs_g)}</b> g Kohlenhydrate</span><span><b>${n0(day.fat_g)}</b> g Fett</span></div>
         </div>
         ${meter("sugar_g", Number(day.sugar_g) || 0)}${meter("caffeine_mg", Number(day.caffeine_mg) || 0)}
-        <div class="fd-hint">Red Bull wird weiter im Tracking erfasst und hier mitgezählt.</div>
       </div>
       ${st.bundles.length ? `<div class="section-label">Vorlagen</div>${st.bundles.map((b) => `
         <div class="fd-bundle" role="button" tabindex="0" data-act="addBundle" data-id="${b.id}">
@@ -266,7 +263,7 @@ function build(core, root) {
   const val = (id) => { const el = $(id); return el ? el.value : ""; };
   const stepper = (act, id, qty) => `<span class="fd-step"><button class="btn-pill" data-act="${act}" data-id="${id}" data-d="-1">−</button><span>${n1(qty)}</span><button class="btn-pill" data-act="${act}" data-id="${id}" data-d="1">+</button></span>`;
   const labelPicker = (current) => `<div class="tag-picker">${MEAL_LABELS.map((l) => `<button class="tag-btn ${current === l ? "active" : ""}" data-act="pickLabel" data-label="${l}">${l}</button>`).join("")}</div>`;
-  const foodOptions = () => st.foods.filter((f) => !f.tracking_name).sort((a, b) => a.name.localeCompare(b.name, "de")).map((f) => `<option value="${f.id}">${esc(f.name)} (${esc(f.serving_label)})</option>`).join("");
+  const foodOptions = () => st.foods.sort((a, b) => a.name.localeCompare(b.name, "de")).map((f) => `<option value="${f.id}">${esc(f.name)} (${esc(f.serving_label)})</option>`).join("");
 
   // Eingaben des offenen Sheets sichern, bevor es neu gerendert wird (Stepper, Posten entfernen …)
   function captureDraft() {
