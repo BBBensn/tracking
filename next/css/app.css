@@ -19,7 +19,7 @@ body { overscroll-behavior: none; }
   position: relative;
   max-width: 800px;
   margin: 0 auto;
-  padding: calc(var(--safe-t) + 1.25rem) 1.25rem calc(var(--nav-clear) + 1.5rem);
+  padding: 0 1.25rem calc(var(--nav-clear) + 1.5rem);
   min-height: 100vh;
 }
 .module-title {
@@ -76,3 +76,30 @@ body { overscroll-behavior: none; }
   font: inherit; color: #fff; background: none; border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 6px; padding: 3px 9px; text-decoration: none; cursor: pointer; white-space: nowrap;
 }
+
+/* ── Sticky Sub-Navigation je Tracker (Heute / Verlauf / …) ──
+   Inhalte scrollen unter der Leiste durch und verschwimmen im Blur, wie in iOS-Apps:
+   halbtransparenter Hintergrund + backdrop-filter, darunter ein weicher Auslauf
+   (::after: Blur mit Verlaufs-Maske). Die Leiste deckt auch die Statusleisten-Safe-Area ab. */
+.subnav {
+  position: sticky; top: 0; z-index: 20;
+  margin: 0 -1.25rem 1rem;
+  padding: calc(var(--safe-t) + 0.5rem) 1.25rem 0;
+  background: rgba(10, 10, 11, 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+.subnav::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 22px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(10, 10, 11, 0.35), transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
+/* .tabs ist der horizontal scrollbare Innenteil (nur er scrollt, nie die Seite) */
+.subnav .tabs {
+  display: flex; overflow-x: auto; scrollbar-width: none;
+  border-bottom: 1px solid var(--border);
+}
+.subnav .tabs::-webkit-scrollbar { display: none; }

@@ -5,11 +5,6 @@
 
 const CSS = `.m-health {
       /* ── Tabs (scrollt horizontal statt die ganze Seite, wie feed's #filtersWrap) ── */
-      .tabs {
-        display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem;
-        overflow-x: auto; scrollbar-width: none;
-      }
-      .tabs::-webkit-scrollbar { display: none; }
       .tab {
         font-family: "DM Mono", monospace; font-size: 11px; text-transform: uppercase;
         letter-spacing: 0.1em; padding: 9px 14px; cursor: pointer; color: var(--muted);
@@ -198,13 +193,13 @@ const CSS = `.m-health {
 }
 `;
 
-const TEMPLATE = `<div class="tabs">
+const TEMPLATE = `<div class="subnav"><div class="tabs">
         <button class="tab active" onclick="HL.switchTab('heute', this)">Heute</button>
         <button class="tab" onclick="HL.switchTab('verlauf', this)">Verlauf</button>
         <button class="tab" onclick="HL.switchTab('dashboard', this)">Dashboard</button>
         <button class="tab" onclick="HL.switchTab('medikamente', this)">Medikamente</button>
         <button class="tab" onclick="HL.switchTab('oura', this)">Oura</button>
-      </div>
+      </div></div>
 
       <!-- ═══ TAB: HEUTE ═══ -->
       <div id="tab-heute" class="tab-section visible">

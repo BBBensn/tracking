@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Habit-/Verbrauchstracker PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v1.7.0 (Gesamt-App-Vorschau unter /next/; Live-App unter / ist noch die alte)
+- **Version:** v1.8.0 (Gesamt-App-Vorschau unter /next/; Live-App unter / ist noch die alte)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -136,6 +136,12 @@ Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammeng
   während des Mountens existiert. Neue Module: gleiches Muster oder `addEventListener`
 - Modul-CSS steht als `.m-<id> { … }` (natives CSS-Nesting). Gemeinsames gehört nach
   `/shared/bensn.css`, nicht in ein Modul
+- **Sub-Navigation:** jedes Modul legt seine Tabs in `<div class="subnav"><div class="tabs">…`.
+  `.subnav` (app.css) ist sticky mit Blur + Auslauf; Inhalte scrollen darunter durch. Die
+  Module bringen nur das Aussehen der einzelnen `.tab`-Buttons mit, nicht `.tabs`
+- Module mit Timern/Listenern/Overlays an `<body>` liefern `dispose()` und rufen es in
+  `unmount()` auf (siehe `work.js`)
+- Tab-Labels der Leiste bewusst kurz und englisch (Work, Health, Food, Habits, Sport)
 - API immer über `core.api()` / `core.apiHealth()` — nie rohes `fetch`. Die Wrapper
   erkennen abgelaufene Sessions (`redirect: "manual"` → opaqueredirect) und zeigen das
   Fehlerbanner. `/hapi/…` → health-api `/api/…` (eigener Prefix, weil bensn-api schon
@@ -152,11 +158,11 @@ API_KEY=$(ssh bensn "grep -o '[a-f0-9]\{64\}' /etc/nginx/sites-enabled/tracking.
 ```
 Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder löschen.
 
-**Phasen:** ✅ 0 Backup-Cron · ✅ 1 Shell + Modul Gesundheit (Vorschau `/next/`) ·
+**Phasen:** ✅ 0 Backup-Cron · ✅ 1 Shell + Modul Health (Vorschau `/next/`) ·
 ⬜ 2 Essen (neu: Katalog, Mahlzeit-Zeilen, Koffein/Zucker, Red-Bull-Migration) ·
-⬜ 3 Habits (= bisheriges tracking) · ⬜ 4 Arbeit (worktracker, zuletzt) ·
+⬜ 3 Habits (= bisheriges tracking) · 🟡 4 Arbeit (Modul in der Vorschau, Schreib-Flows noch an einer echten Schicht zu prüfen) ·
 ⬜ 5 Cutover (`next/` → Root, alte Vhosts leiten um, neuer Service Worker, Feed-Anpassung) ·
-⬜ 6 Sport · ⬜ Kurzbefehle/Quick-Log-API mit eigenen Tokens (danach)
+⬜ 6 Sport · ⬜ Wisch-Gesten zwischen den Sub-Tabs eines Trackers (Randbereiche und horizontal scrollbare Elemente ausnehmen) · ⬜ Eingabe-Seite des Worktrackers als Sheet übernehmen (bis dahin Link auf worktracker.bensn.me/eingabe) · ⬜ Kurzbefehle/Quick-Log-API mit eigenen Tokens (danach)
 
 ## Roadmap
 
@@ -171,6 +177,7 @@ Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder lösche
 | v1.6.2 | `.btn-danger` entfernt, Kategorie-/Item-Löschen in den Einstellungen-Sheets nutzt jetzt `.btn-pill.red` — konvergiert mit health.bensn.mes Löschen-Buttons in Sheets | ✅ deployed (2026-09-16) |
 | v1.6.3 | Bugfix: Service Worker konnte auf Safari/Mobilfunk komplett ausfallen ("FetchEvent.respondWith received an error: Returned response is null") — `fetch(...).catch(() => caches.match(...))` resolvte bei Netzwerkfehler + Cache-Miss zu `undefined`, was WebKit als fatalen Fehler wertet (Chromium verzeiht das). Cache-Fallback gibt jetzt immer ein echtes Response-Objekt zurück, notfalls eine 503-Antwort. Gleicher Fix in `health`/`feed` (identischer sw.js-Code in allen drei Apps) | ✅ deployed (2026-09-19) |
 | v1.7.0 | Gesamt-App-Vorschau unter `/next/`: Shell mit schwebender unterer Tab-Leiste, Fehlerbanner statt Status-Anzeige, Router, Modul Gesundheit (aus health.bensn.me übernommen, noch ohne Änderungen am Verhalten). Neue Nginx-Routen `/next/` und `/hapi/`; täglicher DB-Backup-Cron | ✅ deployed (2026-10-03) |
+| v1.8.0 | Gesamt-App-Vorschau: Modul **Work** (aus worktracker.bensn.me übernommen; Pausen-Overlay/Intervalle werden beim Verlassen aufgeräumt, `--orange` nur im Modul pink-rot), sticky Sub-Navigation mit Blur, kürzere Tab-Labels | ✅ deployed (2026-10-03) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 

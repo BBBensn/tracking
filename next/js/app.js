@@ -5,9 +5,9 @@
 import * as core from "./core.js";
 
 const MODULES = [
-  { id: "work", label: "Arbeit", icon: "work", ready: false },
-  { id: "health", label: "Gesundheit", icon: "monitor_heart", ready: true },
-  { id: "food", label: "Essen", icon: "restaurant", ready: false },
+  { id: "work", label: "Work", icon: "work", ready: true },
+  { id: "health", label: "Health", icon: "monitor_heart", ready: true },
+  { id: "food", label: "Food", icon: "restaurant", ready: false },
   { id: "habits", label: "Habits", icon: "task_alt", ready: false },
   { id: "sport", label: "Sport", icon: "fitness_center", ready: false },
 ];
