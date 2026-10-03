@@ -1,9 +1,11 @@
-// habits.js — Modul "Habits" (Konsum-/Gewohnheits-Zähler, Vorrat, Verlauf, Einstellungen).
+// habits.js — Modul "Habits" (Konsum-/Gewohnheits-Zähler, Verlauf, Einstellungen).
 // Aus tracking.bensn.me übernommen. Besonderheiten gegenüber der Einzel-App:
 //  - Handler in Inline-onclick laufen über window.HB (nur solange gemountet).
 //  - API über core.api (Cookie-Auth) — der frühere Client-seitige API-Key entfällt.
 //  - Beim Verlassen: Tastatur-Listener, Toast-Timer und das an <body> gehängte Sheet werden
 //    aufgeräumt (dispose). Kopfzeile/Status/Footer/SW-Registrierung entfallen (macht die Shell).
+//  - Seit 2026-10-04 reine Zähler-Logik: kein Vorrat/Bestand, keine verknüpften Buchungen, keine Packungen.
+//    Antippen eines Buttons bucht sofort, gedrückt halten öffnet das Eintrag-Sheet (Menge, Uhrzeit, Notiz).
 //  - Red Bull, Holy und Kaffee sind seit 2026-10-03 nach Food migriert (tracking_items inaktiv).
 //  - Arbeits-Zigaretten kommen mit EINER Abfrage (/api/smoke-breaks) und stehen je Pause chronologisch im Verlauf.
 //  - Verlauf: gemeinsame Komponente js/history.js (Monate einklappbar, Liste/Kalender; die Datums-Pills entfallen).
@@ -88,15 +90,6 @@ const CSS = `.m-habits {
             .item-card:hover {
                 border-color: var(--border-hover);
             }
-            /* Vorrat items are backgrounded — habit/counter tracking is the focus now */
-            .item-card.item-card-vorrat {
-                padding: 0.7rem 1.1rem;
-                opacity: 0.6;
-                border-left-color: var(--border) !important;
-            }
-            .item-card.item-card-vorrat:hover {
-                opacity: 1;
-            }
             .item-name {
                 font-family: "Syne", sans-serif;
                 font-size: 0.95rem;
@@ -110,33 +103,6 @@ const CSS = `.m-habits {
                 color: var(--muted);
             }
 
-            /* Bestand display */
-            .item-bestand {
-                font-family: "DM Mono", monospace;
-                font-size: 11px;
-                margin-top: 5px;
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-                flex-wrap: wrap;
-            }
-            .bestand-val {
-                color: var(--text);
-                font-weight: 500;
-            }
-            .bestand-label {
-                color: var(--muted);
-            }
-            .bestand-verbrauch {
-                color: var(--muted);
-                font-size: 10px;
-            }
-            .bestand-verbrauch.warn {
-                color: var(--orange);
-            }
-            .bestand-verbrauch.low {
-                color: var(--accent-red);
-            }
 
             /* Zähler display */
             .item-zaehler {
@@ -172,6 +138,9 @@ const CSS = `.m-habits {
                     border-color 0.15s,
                     color 0.15s;
                 white-space: nowrap;
+                -webkit-user-select: none;
+                user-select: none;
+                -webkit-touch-callout: none;
             }
             .btn-unit:hover {
                 background: rgba(255, 255, 255, 0.06);
@@ -332,24 +301,7 @@ const CSS = `.m-habits {
                 color: var(--muted);
             }
 
-            /* ── Bottom Sheet (shared) ── */
-            .overlay {
-                position: fixed;
-                inset: 0;
-                background: rgba(0, 0, 0, 0.75);
-                z-index: 100;
-                display: flex;
-                align-items: flex-end;
-                justify-content: center;
-            }
-            .overlay-sheet {
-                background: #161616;
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-radius: 16px 16px 0 0;
-                padding: 1.5rem 1.25rem 2.5rem;
-                width: 100%;
-                max-width: 480px;
-            }
+            /* ── Sheets: .sheet-title/.sheet-label hier, Overlay-Rahmen kommt als Inline-Style aus showSheet() ── */
             .sheet-label {
                 font-family: "DM Mono", monospace;
                 font-size: 9px;
@@ -429,12 +381,6 @@ const CSS = `.m-habits {
                 font-size: 13px;
                 color: var(--muted);
                 flex-shrink: 0;
-            }
-            .presets {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.4rem;
-                margin-bottom: 0.75rem;
             }
             .preset-btn {
                 font-family: "DM Mono", monospace;
@@ -693,23 +639,6 @@ const CSS = `.m-habits {
                 color: var(--muted);
                 margin-top: 2px;
             }
-            .settings-item-mode {
-                font-family: "DM Mono", monospace;
-                font-size: 9px;
-                padding: 2px 6px;
-                border-radius: 3px;
-                flex-shrink: 0;
-            }
-            .settings-item-mode.bestand {
-                background: rgba(255, 180, 0, 0.1);
-                border: 1px solid rgba(255, 180, 0, 0.2);
-                color: #ffb400;
-            }
-            .settings-item-mode.zaehler {
-                background: rgba(0, 166, 251, 0.08);
-                border: 1px solid rgba(0, 166, 251, 0.2);
-                color: var(--accent-blue);
-            }
             .btn-edit-item {
                 width: 26px;
                 height: 26px;
@@ -731,6 +660,16 @@ const CSS = `.m-habits {
             }
 
             /* ── Item/Category edit sheet ── */
+            .btn-edit-row {
+                display: grid;
+                grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+                gap: 0.4rem;
+                margin-bottom: 0.4rem;
+                align-items: center;
+            }
+            .btn-edit-row .sheet-input {
+                min-width: 0;
+            }
             .sheet-row {
                 margin-bottom: 0.75rem;
             }
@@ -775,12 +714,6 @@ const CSS = `.m-habits {
             /* .btn-danger removed — converged on .btn-pill.red (shared/bensn.css),
                same destructive-in-sheet role as health.bensn.me now uses */
 
-            /* ── Vorrat badge ── */
-            .settings-item-mode.vorrat {
-                background: rgba(156, 56, 72, 0.12);
-                border: 1px solid rgba(156, 56, 72, 0.25);
-                color: #c97b8a;
-            }
             .history-type-badge.auffuellung {
                 background: rgba(74, 222, 128, 0.08);
                 border: 1px solid rgba(74, 222, 128, 0.2);
@@ -832,83 +765,7 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
                 <div id="einstellungen-content"></div>
             </div>
 
-            <!-- ── Entry Bottom Sheet ── -->
-        <div
-            id="overlay"
-            class="overlay"
-            style="display: none"
-            onclick="HB.closeOverlay(event)"
-        >
-            <div class="overlay-sheet" onclick="event.stopPropagation()">
-                <div class="sheet-label">Eintrag</div>
-                <div class="sheet-title" id="overlay-name">—</div>
-
-                <!-- Mode info for Bestand items -->
-                <div
-                    id="bestand-hint"
-                    style="display: none"
-                    class="sheet-subtitle"
-                >
-                    Aktuellen Bestand eintragen.<br />
-                    <span style="color: rgba(255, 180, 0, 0.8)"
-                        >Verbrauch = Differenz zum letzten Eintrag.</span
-                    >
-                </div>
-
-                <div
-                    class="sheet-label"
-                    style="margin-bottom: 4px"
-                    id="overlay-field-label"
-                >
-                    Menge
-                </div>
-                <div class="input-row">
-                    <input
-                        id="overlay-amount"
-                        type="number"
-                        min="0"
-                        step="any"
-                        placeholder="0"
-                    />
-                    <span class="input-unit" id="overlay-unit">g</span>
-                </div>
-                <div class="presets" id="overlay-presets"></div>
-                <div class="sheet-label" style="margin-bottom: 4px">
-                    Notiz (optional)
-                </div>
-                <input
-                    class="note-input"
-                    id="overlay-note"
-                    type="text"
-                    placeholder="z.B. neue Packung…"
-                />
-                <div class="sheet-btns">
-                    <button class="btn-save" onclick="HB.submitEntry()">
-                        Speichern
-                    </button>
-                    <button
-                        class="btn-cancel"
-                        onclick="
-                            document.getElementById('overlay').style.display =
-                                'none'
-                        "
-                    >
-                        Abbrechen
-                    </button>
-                </div>
-                <div
-                    id="overlay-msg"
-                    style="
-                        font-family: &quot;DM Mono&quot;, monospace;
-                        font-size: 11px;
-                        margin-top: 0.5rem;
-                        text-align: center;
-                    "
-                ></div>
-            </div>
-        </div>
-
-        <!-- Toast -->
+            <!-- Toast -->
         <div class="toast" id="toast"></div>
 
         `;
@@ -927,7 +784,6 @@ function build(core, root) {
             let _allEntries = [];
             let _wtByDate = {};
             let _hx = null;
-            let _overlayItem = null;
             let _apiOnline = false;
 
             /* ════════════════════════════════════════════════════════════════
@@ -1013,131 +869,6 @@ function build(core, root) {
 
             function entriesForItem(itemId) {
                 return _allEntries.filter((e) => e.item_id === itemId);
-            }
-
-            // ── Zähler helpers ──
-            function zaehlerToday(itemId) {
-                const td = todayKey();
-                return _allEntries
-                    .filter(
-                        (e) =>
-                            e.item_id === itemId &&
-                            e.date === td &&
-                            e.entry_type === "zaehler",
-                    )
-                    .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-            }
-
-            // ── Vorrat helpers ──
-            // Alle Buchungen kumulativ: auffuellung=+, entnahme=-, delta=signed
-            function vorratBestand(itemId) {
-                const rows = entriesForItem(itemId)
-                    .filter((e) =>
-                        ["auffuellung", "entnahme", "delta"].includes(
-                            e.entry_type,
-                        ),
-                    )
-                    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-                if (!rows.length) return null;
-                let bestand = 0;
-                rows.forEach((e) => {
-                    const amt = parseFloat(e.amount) || 0;
-                    if (e.entry_type === "auffuellung") bestand += amt;
-                    else if (e.entry_type === "entnahme") bestand -= amt;
-                    else if (e.entry_type === "delta") bestand += amt;
-                });
-                // Option C: WT-Entnahmen via linked_items einrechnen
-                bestand += wtLinkedDeduction(itemId);
-                return { bestand, fillDate: rows[0].timestamp };
-            }
-            function vorratHasAnyEntries(itemId) {
-                return entriesForItem(itemId).some((e) =>
-                    ["auffuellung", "entnahme", "delta"].includes(e.entry_type),
-                );
-            }
-            function vorratTodayUsed(itemId) {
-                const td = todayKey();
-                const manualUsed = _allEntries
-                    .filter((e) => e.item_id === itemId && e.date === td)
-                    .reduce((s, e) => {
-                        const amt = parseFloat(e.amount) || 0;
-                        if (e.entry_type === "entnahme") return s + amt;
-                        if (e.entry_type === "delta" && amt < 0)
-                            return s + Math.abs(amt);
-                        return s;
-                    }, 0);
-                // Add WT-linked deductions for today only
-                const wtToday = _wtByDate[td] || { spicy: 0, blend: 0 };
-                const wtTodayDeduction = wtLinkedDeductionForDay(
-                    itemId,
-                    wtToday.spicy || 0,
-                    wtToday.blend || 0,
-                );
-                return (
-                    manualUsed +
-                    (wtTodayDeduction < 0 ? Math.abs(wtTodayDeduction) : 0)
-                );
-            }
-
-            // Calculates total WT-driven deduction for an item across all days.
-            // Looks at all items that have this item in their linked_items,
-            // then sums up WT counts (spicy/blend) × the linked amount.
-            function wtLinkedDeduction(itemId) {
-                const item = itemById(itemId);
-                if (!item) return 0;
-                let total = 0;
-                // For each day in _wtByDate, check if any WT-tracked item links to this item
-                Object.values(_wtByDate).forEach((dayWt) => {
-                    total += wtLinkedDeductionForDay(
-                        itemId,
-                        dayWt.spicy || 0,
-                        dayWt.blend || 0,
-                    );
-                });
-                return total;
-            }
-
-            // For a single day's WT counts, calculate the deduction for itemId via linked_items.
-            function wtLinkedDeductionForDay(itemId, spicy, blend) {
-                let deduction = 0;
-                allItems().forEach((sourceItem) => {
-                    if (
-                        !sourceItem.linked_items ||
-                        !sourceItem.linked_items.length
-                    )
-                        return;
-                    // How many WT events for this source item today?
-                    let wtCount = 0;
-                    if (sourceItem.slug === "spicy") wtCount = spicy;
-                    if (sourceItem.slug === "zigarette") wtCount = blend;
-                    if (wtCount === 0) return;
-                    // Does this source item link to our target item?
-                    sourceItem.linked_items.forEach((link) => {
-                        const linkedItem = allItems().find(
-                            (i) =>
-                                i.slug === link.item_slug ||
-                                i.id === link.item_slug,
-                        );
-                        if (linkedItem && linkedItem.id === itemId) {
-                            deduction +=
-                                wtCount * (parseFloat(link.amount) || 0);
-                        }
-                    });
-                });
-                return deduction; // negative = Entnahme
-            }
-
-            // ── Packungshierarchie ──
-            // Gibt "28 Stk. (≈ 0.2 Pkg.)" zurück wenn pack_size definiert
-            function fmtAmtWithPack(amount, item) {
-                const base = fmtAmt(amount, item);
-                if (!item.pack_size || !item.pack_unit) return base;
-                const packs = amount / parseFloat(item.pack_size);
-                const packStr =
-                    packs >= 1
-                        ? `${+packs.toFixed(1).replace(/\.0$/, "")} ${item.pack_unit}`
-                        : `≈ ${+packs.toFixed(2).replace(/\.?0+$/, "")} ${item.pack_unit}`;
-                return `${base} <span style="color:var(--muted);font-size:10px">(${packStr})</span>`;
             }
 
             // Tages-Gesamtmenge für Zähler (netto, Richtung beachten)
@@ -1232,184 +963,70 @@ function build(core, root) {
                         '<div class="empty-state">Keine Items konfiguriert.<br>Füge Items unter ⚙ Einstellungen hinzu.</div>';
                     return;
                 }
-                container.innerHTML = "";
                 const wtToday = _wtByDate[todayKey()] || {
                     spicy: 0,
                     blend: 0,
                     shifts: [],
                 };
 
-                _categories.forEach((cat) => {
-                    // Habit-tracker (zaehler) items are the focus — vorrat items are
-                    // backgrounded, so they sort after the counters within their category.
-                    const items = [...(cat.items || [])].sort(
-                        (a, b) =>
-                            (a.tracking_mode === "zaehler" ? 0 : 1) -
-                            (b.tracking_mode === "zaehler" ? 0 : 1),
-                    );
-                    if (!items.length) return;
-                    const colorClass = catColorClass(cat.color);
-                    let catActivity = 0;
-                    let itemsHtml = "";
+                container.innerHTML = _categories
+                    .map((cat) => {
+                        const items = cat.items || [];
+                        if (!items.length) return "";
+                        let catActivity = 0;
+                        const itemsHtml = items
+                            .map((item) => {
+                                const total = zaehlerTodayNet(item.id);
+                                if (total > 0) catActivity++;
 
-                    items.forEach((item) => {
-                        const dir = item.counter_direction || "+";
-                        const isNeg = dir === "-";
-
-                        if (item.tracking_mode === "bestand") {
-                            // Legacy bestand — render as simple vorrat without counter
-                            const vd =
-                                vorratBestand(item.id) ||
-                                (() => {
-                                    // fall back to old bestand entries
-                                    const rows = entriesForItem(item.id)
-                                        .filter(
-                                            (e) => e.entry_type === "bestand",
-                                        )
-                                        .sort((a, b) =>
-                                            b.timestamp.localeCompare(
-                                                a.timestamp,
-                                            ),
-                                        );
-                                    if (!rows.length) return null;
-                                    return {
-                                        bestand: parseFloat(rows[0].amount),
-                                        filled: parseFloat(rows[0].amount),
-                                        used: 0,
-                                        fillDate: rows[0].timestamp,
-                                    };
-                                })();
-                            if (vd) catActivity++;
-                            const dispHtml = vd
-                                ? `<div class="item-bestand"><span class="bestand-val">${fmtAmtWithPack(vd.bestand, item)}</span><span class="bestand-label">Bestand · ${localDateStr(vd.fillDate)}</span></div>`
-                                : `<div class="item-bestand"><span class="bestand-label">Kein Bestand eingetragen</span></div>`;
-                            itemsHtml += `<div class="item-card item-card-vorrat">
-                                <div>
-                                    <div class="item-name">${item.name}</div>
-                                    <div class="item-meta">Vorrat · ${item.base_unit}</div>
-                                    ${dispHtml}
-                                </div>
-                                <div class="item-actions">
-                                    <button class="btn-unit" onclick="HB.openEntry('${item.id}')">Eintrag</button>
-                                </div>
-                            </div>`;
-                        } else if (item.tracking_mode === "vorrat") {
-                            const vd = vorratBestand(item.id);
-                            const todayUsed = vorratTodayUsed(item.id);
-                            if (vd) catActivity++;
-                            // Warn colors
-                            const bestandColor =
-                                vd && vd.bestand <= 0
-                                    ? "var(--accent-red)"
-                                    : vd &&
-                                        vd.filled > 0 &&
-                                        vd.bestand <= vd.filled * 0.2
-                                      ? "var(--orange)"
-                                      : "var(--text)";
-                            const dispHtml = vd
-                                ? `<div class="item-bestand">
-                                    <span class="bestand-val" style="color:${bestandColor}">${fmtAmtWithPack(vd.bestand, item)}</span>
-                                    <span class="bestand-label">übrig · ${localDateStr(vd.fillDate)}</span>
-                                    ${todayUsed > 0 ? `<span style="color:rgba(255,255,255,.15);font-size:9px">·</span><span class="bestand-verbrauch" style="color:var(--accent-red)">−${fmtAmt(todayUsed, item)} heute</span>` : ""}
-                                  </div>`
-                                : (() => {
-                                      const hasEntries = vorratHasAnyEntries(
-                                          item.id,
-                                      );
-                                      return hasEntries
-                                          ? `<div class="item-bestand"><span class="bestand-label" style="color:var(--orange)">⚠ Erst Anfangsbestand auffüllen (✎ Button)</span></div>`
-                                          : `<div class="item-bestand"><span class="bestand-label">Kein Vorrat eingetragen</span></div>`;
-                                  })();
-                            itemsHtml += `<div class="item-card item-card-vorrat">
-                                <div>
-                                    <div class="item-name">${item.name}</div>
-                                    <div class="item-meta">Vorrat · ${item.base_unit}</div>
-                                    ${dispHtml}
-                                </div>
-                                <div class="item-actions">
-                                    ${renderItemButtons(item)}
-                                    <button class="btn-icon" onclick="HB.openEntry('${item.id}')" title="Auffüllen / Entnahme">
-                                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"/></svg>
-                                    </button>
-                                </div>
-                            </div>`;
-                        } else {
-                            // Zähler
-                            const total = zaehlerTodayNet(item.id);
-                            if (total > 0) catActivity++;
-
-                            // WT supplement
-                            let wtHtml = "";
-                            const wtSpicy =
-                                item.slug === "spicy" ? wtToday.spicy : 0;
-                            const wtBlend =
-                                item.slug === "zigarette" ? wtToday.blend : 0;
-                            const wtAmt = wtSpicy + wtBlend;
-                            if (wtAmt > 0) {
-                                catActivity++;
-                                const src =
-                                    wtToday.shifts
-                                        .map((s) => s.station)
-                                        .join(", ") || "Dienst";
-                                wtHtml = `<div class="item-wt-row">
+                                // Zigaretten aus dem Arbeitstracker kommen dazu
+                                let wtHtml = "";
+                                const wtAmt =
+                                    (item.slug === "spicy" ? wtToday.spicy : 0) +
+                                    (item.slug === "zigarette" ? wtToday.blend : 0);
+                                if (wtAmt > 0) {
+                                    catActivity++;
+                                    const src =
+                                        wtToday.shifts
+                                            .map((s) => s.station)
+                                            .join(", ") || "Dienst";
+                                    wtHtml = `<div class="item-wt-row">
                                     <span class="wt-arbeit-badge">Arbeit</span>
                                     <span class="wt-arbeit-val">+${wtAmt} im Dienst</span>
                                     <span class="wt-arbeit-src">${src}</span>
                                 </div>`;
-                            }
-                            const totalIncWT = total + wtAmt;
-
-                            // Counter button: shows direction + unit_size
-                            const stdVal = parseFloat(item.unit_size) || 1;
-                            const cntLabel =
-                                item.slug === "redbull"
-                                    ? `${isNeg ? "−" : "+"}1 Dose`
-                                    : `${isNeg ? "−" : "+"}${fmtAmt(stdVal, item)}`;
-                            const cntColor = isNeg
-                                ? "rgba(255,0,81,.4)"
-                                : "rgba(255,255,255,.25)";
-                            const cntTextColor = isNeg
-                                ? "var(--accent-red)"
-                                : "var(--text)";
-
-                            // Display: show net total with direction
-                            let dispText = "—";
-                            if (total > 0) {
-                                dispText = fmtAmt(total, item);
-                                if (item.pack_size && item.pack_unit) {
-                                    const packs =
-                                        total / parseFloat(item.pack_size);
-                                    dispText += ` <span style="color:var(--muted);font-size:10px">(${+packs.toFixed(2).replace(/\.?0+$/, "")} ${item.pack_unit})</span>`;
                                 }
-                            }
+                                const totalIncWT = total + wtAmt;
+                                const dispText = total > 0 ? fmtAmt(total, item) : "—";
 
-                            itemsHtml += `<div class="item-card">
+                                return `<div class="item-card">
                                 <div>
-                                    <div class="item-name">${item.name}</div>
-                                    <div class="item-meta">Zähler · ${isNeg ? "abzählend" : "aufzählend"} · ${item.base_unit}</div>
+                                    <div class="item-name">${core.esc(item.name)}</div>
+                                    <div class="item-meta">${core.esc(item.base_unit)}</div>
                                     <div class="item-zaehler">Heute: <span>${dispText}</span>${totalIncWT > total ? ` · Gesamt: <span>${fmtAmt(totalIncWT, item)}</span>` : ""}</div>
                                     ${wtHtml}
                                 </div>
                                 <div class="item-actions">
                                     ${renderItemButtons(item)}
-                                    <button class="btn-icon" onclick="HB.openEntry('${item.id}')" title="Manuell / mit Notiz">
+                                    <button class="btn-icon" data-manual="${item.id}" title="Mit Uhrzeit / Notiz eintragen">
                                         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"/></svg>
                                     </button>
                                 </div>
                             </div>`;
-                        }
-                    });
+                            })
+                            .join("");
 
-                    container.innerHTML += `
-                        <div class="cat-group ${colorClass}">
+                        return `
+                        <div class="cat-group ${catColorClass(cat.color)}">
                             <div class="cat-header">
                                 <span class="cat-icon">${cat.emoji}</span>
-                                <span class="cat-title">${cat.name}</span>
+                                <span class="cat-title">${core.esc(cat.name)}</span>
                                 <span class="cat-today-total">${catActivity > 0 ? catActivity + " aktiv" : ""}</span>
                             </div>
                             ${itemsHtml}
                         </div>`;
-                });
+                    })
+                    .join("");
             }
 
             /* ════════════════════════════════════════════════════════════════
@@ -1547,17 +1164,9 @@ function build(core, root) {
                         (item) => `
                     <div class="settings-item-row">
                         <div>
-                            <div class="settings-item-name">${item.name}</div>
-                            <div class="settings-item-meta">${item.counter_direction === "-" ? "−" : "+"} ${item.unit_size} ${item.base_unit}${item.pack_size ? ` · 1 ${item.pack_unit || "Pkg."} = ${item.pack_size} ${item.base_unit}` : ""}${item.buttons && item.buttons.length ? ` · ${item.buttons.length} Btn` : ""}</div>
-                            ${item.linked_items && item.linked_items.length ? `<div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--accent-blue);margin-top:2px">→ ${item.linked_items.map((l) => l.item_slug + (l.amount < 0 ? " " + l.amount : "")).join(", ")}</div>` : ""}
+                            <div class="settings-item-name">${core.esc(item.name)}</div>
+                            <div class="settings-item-meta">${core.esc(item.base_unit)} · ${itemButtons(item).map((b) => b.label).join("  ")}</div>
                         </div>
-                        <span class="settings-item-mode ${item.tracking_mode}">${
-                            item.tracking_mode === "bestand"
-                                ? "Bestand"
-                                : item.tracking_mode === "vorrat"
-                                  ? "Vorrat"
-                                  : "Zähler"
-                        }</span>
                         <button class="btn-edit-item" onclick="HB.openItemSheet('${item.id}','${cat.id}')" title="Bearbeiten">
                             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"/></svg>
                         </button>
@@ -1730,148 +1339,64 @@ function build(core, root) {
             /* ════════════════════════════════════════════════════════════════
    ITEM SHEET
    ════════════════════════════════════════════════════════════════ */
+            // Buttons eines Items: gespeicherte Liste, sonst ein Standard-Button aus unit_size
+            function itemButtons(item) {
+                if (Array.isArray(item.buttons) && item.buttons.length) return item.buttons;
+                const amt = parseFloat(item.unit_size) || 1;
+                return [{ label: autoLabel(amt, item.base_unit), amount: amt }];
+            }
+            function autoLabel(amount, unit) {
+                return `${amount < 0 ? "−" : "+"}${fmtAmt(Math.abs(amount), { base_unit: unit })}`;
+            }
+
+            function btnEditRow(b) {
+                return `<div class="btn-edit-row">
+                    <input class="sheet-input be-amount" type="number" step="any" placeholder="Menge" value="${b ? b.amount : ""}">
+                    <input class="sheet-input be-label" type="text" placeholder="Beschriftung (optional)" value="${b && b.custom ? core.esc(b.label) : ""}">
+                    <button class="btn-icon" onclick="this.closest('.btn-edit-row').remove()" title="Button entfernen"><span class="material-symbols-outlined">close</span></button>
+                </div>`;
+            }
+            function addBtnRow() {
+                document.getElementById("is-buttons").insertAdjacentHTML("beforeend", btnEditRow(null));
+            }
+
             function openItemSheet(itemId, catId) {
-                const item = itemId
-                    ? allItems().find((i) => i.id === itemId)
-                    : null;
-                const title = item ? "Item bearbeiten" : "Neues Item";
-                const UNITS = [
-                    "Stk.",
-                    "g",
-                    "ml",
-                    "Dose",
-                    "kg",
-                    "l",
-                    "Packung",
-                    "Tablette",
-                    "Kapsel",
-                ];
-                const mode = item ? item.tracking_mode : "zaehler";
-                const dir = item ? item.counter_direction || "+" : "+";
+                const item = itemId ? allItems().find((i) => i.id === itemId) : null;
+                const UNITS = ["Stk.", "g", "ml", "Dose", "kg", "l", "Packung", "Tablette", "Kapsel"];
+                // Beschriftung nur dann als "eigene" vorbelegen, wenn sie vom automatischen Text abweicht
+                const rows = item
+                    ? itemButtons(item).map((b) => ({
+                          ...b,
+                          custom: b.label !== autoLabel(parseFloat(b.amount) || 0, item.base_unit),
+                      }))
+                    : [{ amount: 1, label: "" }];
 
                 showSheet(`
                     <div class="sheet-label">Item</div>
-                    <div class="sheet-title">${title}</div>
+                    <div class="sheet-title">${item ? "Item bearbeiten" : "Neues Item"}</div>
 
                     <div class="sheet-row">
                         <div class="sheet-label" style="margin-bottom:4px">Name</div>
-                        <input class="sheet-input" id="is-name" type="text" value="${item ? item.name : ""}" placeholder="z.B. Bupropion 150mg">
+                        <input class="sheet-input" id="is-name" type="text" value="${item ? core.esc(item.name) : ""}" placeholder="z.B. Zigarette">
                     </div>
 
                     <div class="sheet-row">
-                        <div class="sheet-label" style="margin-bottom:4px">Slug
-                            <span style="font-weight:400;color:var(--muted)"> · für Verknüpfte Buchungen</span>
-                        </div>
-                        ${
-                            item
-                                ? `<div style="display:flex;align-items:center;gap:.5rem">
-                                <code style="font-family:'DM Mono',monospace;font-size:12px;color:var(--accent-blue);background:rgba(0,166,251,.08);border:1px solid rgba(0,166,251,.2);border-radius:6px;padding:6px 10px;flex:1;word-break:break-all">${item.slug || "—"}</code>
-                                <button onclick="navigator.clipboard.writeText('${item.slug || ""}').then(()=>HB.showToast('Slug kopiert'))"
-                                    style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--muted);font-size:11px;cursor:pointer;white-space:nowrap">Copy</button>
-                               </div>`
-                                : `<input class="sheet-input" id="is-slug" type="text" placeholder="auto (aus Name generiert)" style="font-family:'DM Mono',monospace;font-size:12px">
-                               <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:.3rem">Nur a-z, 0-9 und - · kann nach Erstellen nicht mehr geändert werden</div>`
-                        }
-                    </div>
-
-                    <div class="sheet-row">
-                        <div class="sheet-label" style="margin-bottom:6px">Tracking-Modus</div>
-                        <div class="sheet-toggle">
-                            <button class="sheet-toggle-btn ${mode === "zaehler" ? "active" : ""}"
-                                onclick="HB.selectMode(this,'zaehler')" data-val="zaehler">Zähler</button>
-                            <button class="sheet-toggle-btn ${mode === "vorrat" || mode === "bestand" ? "active" : ""}"
-                                onclick="HB.selectMode(this,'vorrat')" data-val="vorrat">Vorrat</button>
-                        </div>
-                        <input type="hidden" id="is-mode" value="${mode === "bestand" ? "vorrat" : mode}">
-                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:.4rem" id="is-mode-hint">
-                            ${
-                                mode === "vorrat" || mode === "bestand"
-                                    ? "Vorrat auffüllen, Entnahmen buchen. Bestand schrumpft."
-                                    : "Jede Einheit einzeln erfassen, summiert pro Tag."
-                            }
-                        </div>
-                    </div>
-
-                    <div class="sheet-row">
-                        <div class="sheet-label" style="margin-bottom:6px">Richtung & Standardwert</div>
-                        <div style="display:flex;gap:.4rem;align-items:center">
-                            <div class="sheet-toggle" style="flex-shrink:0">
-                                <button class="sheet-toggle-btn ${dir === "+" ? "active" : ""}"
-                                    onclick="HB.selectDir(this,'+')" data-val="+">+</button>
-                                <button class="sheet-toggle-btn ${dir === "-" ? "active" : ""}"
-                                    onclick="HB.selectDir(this,'-')" data-val="-">−</button>
-                            </div>
-                            <input class="sheet-input" id="is-unitsize" type="number" min="0.001" step="any"
-                                value="${item ? item.unit_size : 1}" style="flex:1">
-                            <input type="hidden" id="is-dir" value="${dir}">
-                        </div>
-                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:.35rem">
-                            Pro Tap auf den Schnell-Button
-                        </div>
-                    </div>
-
-                    <div class="sheet-row">
-                        <div class="sheet-label" style="margin-bottom:4px">Basis-Einheit</div>
+                        <div class="sheet-label" style="margin-bottom:4px">Einheit</div>
                         <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.4rem" id="is-unit-pills">
-                            ${UNITS.map(
-                                (
-                                    u,
-                                ) => `<button onclick="HB.selectUnit(this,'${u}')" data-val="${u}"
+                            ${UNITS.map((u) => `<button onclick="HB.selectUnit(this,'${u}')" data-val="${u}"
                                 class="preset-btn"
-                                style="border-color:${item && item.base_unit === u ? "var(--accent-blue)" : "var(--border)"};color:${item && item.base_unit === u ? "var(--accent-blue)" : "var(--muted)"};background:${item && item.base_unit === u ? "rgba(0,166,251,.08)" : "none"}">${u}</button>`,
-                            ).join("")}
+                                style="border-color:${item && item.base_unit === u ? "var(--accent-blue)" : "var(--border)"};color:${item && item.base_unit === u ? "var(--accent-blue)" : "var(--muted)"};background:${item && item.base_unit === u ? "rgba(0,166,251,.08)" : "none"}">${u}</button>`).join("")}
                         </div>
-                        <input class="sheet-input" id="is-unit" type="text" value="${item ? item.base_unit : "Stk."}" placeholder="oder eigene Einheit…">
+                        <input class="sheet-input" id="is-unit" type="text" value="${item ? core.esc(item.base_unit) : "Stk."}" placeholder="oder eigene Einheit…">
                     </div>
 
                     <div class="sheet-row">
-                        <div class="sheet-label" style="margin-bottom:4px">Presets (kommagetrennt)</div>
-                        <input class="sheet-input" id="is-presets" type="text" value="${item ? item.presets : ""}" placeholder="1,5,10,30">
-                    </div>
-
-                    <div class="sheet-row" style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:.75rem">
-                        <div class="sheet-label" style="margin-bottom:.5rem">Packungshierarchie (optional)</div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
-                            <div>
-                                <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:3px">Packungsname</div>
-                                <input class="sheet-input" id="is-pack-unit" type="text" value="${item && item.pack_unit ? item.pack_unit : ""}"
-                                    placeholder="z.B. Pkg." style="font-size:12px;padding:7px 10px">
-                            </div>
-                            <div>
-                                <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:3px">Einheiten pro Packung</div>
-                                <input class="sheet-input" id="is-pack-size" type="number" min="0" step="any"
-                                    value="${item && item.pack_size ? item.pack_size : ""}"
-                                    placeholder="z.B. 30" style="font-size:12px;padding:7px 10px">
-                            </div>
-                        </div>
-                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:.4rem">
-                            Bsp: Pkg. = 30 Stk. → Anzeige "28 Stk. (≈ 0.9 Pkg.)"
-                        </div>
-                    </div>
-
-                    <div class="sheet-row" style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:.75rem">
-                        <div class="sheet-label" style="margin-bottom:.5rem">Quick-Buttons (optional)</div>
-                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:.5rem">
-                            Mehrere Buttons definieren. Format: Label|Betrag, z.B. "+1|-1,+1 Pkg.|30,-1 Pkg.|-30"
-                        </div>
-                        <textarea class="sheet-input" id="is-buttons" rows="2"
-                            placeholder="+1|1, −1|-1, +1 Pkg.|30"
-                            style="resize:none;font-size:11px;line-height:1.6">${item && item.buttons && item.buttons.length ? item.buttons.map((b) => b.label + "|" + b.amount).join(", ") : ""}</textarea>
-                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:.35rem">
-                            Leer lassen → Standard-Button aus Richtung &amp; Standardwert
-                        </div>
-                    </div>
-
-                    <div class="sheet-row" style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:10px;padding:.75rem">
-                        <div class="sheet-label" style="margin-bottom:.5rem">Verknüpfte Buchungen (optional)</div>
-                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-bottom:.5rem">
-                            Bei jedem Tap automatisch andere Items mitbuchen. Format: slug|Betrag, z.B. "filter-tabak|-1, papes-tabak|-1"
-                        </div>
-                        <textarea class="sheet-input" id="is-linked" rows="2"
-                            placeholder="filter-tabak|-1, papes-tabak|-1"
-                            style="resize:none;font-size:11px;line-height:1.6">${item && item.linked_items && item.linked_items.length ? item.linked_items.map((l) => l.item_slug + "|" + l.amount).join(", ") : ""}</textarea>
-                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:.35rem">
-                            Slug = Item-ID aus der URL oder Einstellungen
+                        <div class="sheet-label" style="margin-bottom:4px">Buttons</div>
+                        <div id="is-buttons">${rows.map(btnEditRow).join("")}</div>
+                        <button class="btn-pill" onclick="HB.addBtnRow()">+ Button</button>
+                        <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:.5rem;line-height:1.5">
+                            Antippen bucht sofort, gedrückt halten öffnet das Eintrag-Sheet mit Uhrzeit.
+                            Negative Menge zieht ab (z.B. −1). Ohne Beschriftung wird sie aus Menge und Einheit gebildet.
                         </div>
                     </div>
 
@@ -1884,144 +1409,54 @@ function build(core, root) {
                 `);
             }
 
-            function selectDir(btn, val) {
-                document
-                    .querySelectorAll(
-                        ".sheet-toggle [data-val='+'], .sheet-toggle [data-val='-']",
-                    )
-                    .forEach((b) => b.classList.remove("active"));
-                btn.classList.add("active");
-                document.getElementById("is-dir").value = val; // val is always '+' or '-' (ASCII)
-            }
-
-            function selectMode(btn, val) {
-                document
-                    .querySelectorAll(".sheet-toggle .sheet-toggle-btn")
-                    .forEach((b) =>
-                        b.classList.toggle("active", b.dataset.val === val),
-                    );
-                document.getElementById("is-mode").value = val;
-                const hints = {
-                    vorrat: "Vorrat auffüllen, Entnahmen buchen. Bestand schrumpft.",
-                    zaehler: "Jede Einheit einzeln erfassen, summiert pro Tag.",
-                };
-                document.getElementById("is-mode-hint").textContent =
-                    hints[val] || "";
-            }
             function selectUnit(btn, val) {
-                document
-                    .querySelectorAll("#is-unit-pills button")
-                    .forEach((b) => {
-                        const active = b.dataset.val === val;
-                        b.style.borderColor = active
-                            ? "var(--accent-blue)"
-                            : "var(--border)";
-                        b.style.color = active
-                            ? "var(--accent-blue)"
-                            : "var(--muted)";
-                        b.style.background = active
-                            ? "rgba(0,166,251,.08)"
-                            : "none";
-                    });
+                document.querySelectorAll("#is-unit-pills button").forEach((b) => {
+                    const active = b.dataset.val === val;
+                    b.style.borderColor = active ? "var(--accent-blue)" : "var(--border)";
+                    b.style.color = active ? "var(--accent-blue)" : "var(--muted)";
+                    b.style.background = active ? "rgba(0,166,251,.08)" : "none";
+                });
                 document.getElementById("is-unit").value = val;
             }
 
             async function saveItem(itemId, catId) {
                 const name = document.getElementById("is-name").value.trim();
-                const mode = document.getElementById("is-mode").value;
                 const unit = document.getElementById("is-unit").value.trim();
-                const unitsize =
-                    parseFloat(document.getElementById("is-unitsize").value) ||
-                    1;
-                const presets = document
-                    .getElementById("is-presets")
-                    .value.trim();
-                const dir = document.getElementById("is-dir")?.value || "+";
-                const packUnit =
-                    document.getElementById("is-pack-unit")?.value.trim() ||
-                    null;
-                const packSize =
-                    parseFloat(
-                        document.getElementById("is-pack-size")?.value,
-                    ) || null;
                 const msg = document.getElementById("sheet-msg");
-
-                // Parse buttons: "Label|amount, Label2|amount2"
-                const buttonsRaw =
-                    document.getElementById("is-buttons")?.value.trim() || "";
-                const buttons = buttonsRaw
-                    ? buttonsRaw
-                          .split(",")
-                          .map((s) => s.trim())
-                          .filter(Boolean)
-                          .map((s) => {
-                              const [label, amount] = s.split("|");
-                              return {
-                                  label: label.trim(),
-                                  amount: parseFloat(amount) || 0,
-                              };
-                          })
-                          .filter((b) => b.label)
-                    : [];
-
-                // Parse linked_items: "slug|amount, slug2|amount2"
-                const linkedRaw =
-                    document.getElementById("is-linked")?.value.trim() || "";
-                const linked_items = linkedRaw
-                    ? linkedRaw
-                          .split(",")
-                          .map((s) => s.trim())
-                          .filter(Boolean)
-                          .map((s) => {
-                              const [slug, amount] = s.split("|");
-                              return {
-                                  item_slug: slug.trim(),
-                                  amount: parseFloat(amount) || 0,
-                              };
-                          })
-                          .filter((l) => l.item_slug)
-                    : [];
-
+                const buttons = [...document.querySelectorAll("#is-buttons .btn-edit-row")]
+                    .map((row) => {
+                        const amount = parseFloat(row.querySelector(".be-amount").value);
+                        const custom = row.querySelector(".be-label").value.trim();
+                        return { amount, label: custom || autoLabel(amount, unit) };
+                    })
+                    .filter((b) => b.amount && !isNaN(b.amount));
                 if (!name || !unit) {
                     msg.style.color = "var(--accent-red)";
                     msg.textContent = "Name und Einheit fehlen";
                     return;
                 }
+                if (!buttons.length) {
+                    msg.style.color = "var(--accent-red)";
+                    msg.textContent = "Mindestens ein Button mit Menge";
+                    return;
+                }
                 msg.style.color = "var(--muted)";
                 msg.textContent = "Speichere…";
-                // Slug: only for new items (can't change after creation)
-                const slugRaw = !itemId
-                    ? document.getElementById("is-slug")?.value.trim() || ""
-                    : "";
-                const slug = slugRaw
-                    ? slugRaw
-                          .toLowerCase()
-                          .replace(/[^a-z0-9]+/g, "-")
-                          .replace(/^-|-$/g, "")
-                    : undefined;
+                // unit_size = Standardmenge für das Eintrag-Sheet (erster positiver Button)
+                const firstPos = buttons.find((b) => b.amount > 0);
                 const payload = {
                     name,
-                    tracking_mode: mode,
                     base_unit: unit,
-                    unit_size: unitsize,
-                    presets,
-                    counter_direction: dir,
-                    pack_unit: packUnit || null,
-                    pack_size: packSize || null,
+                    unit_size: firstPos ? firstPos.amount : Math.abs(buttons[0].amount),
                     buttons,
-                    linked_items,
                 };
                 try {
                     if (itemId) {
-                        await apiFetch(
-                            `/api/tracking/items/${itemId}`,
-                            "PATCH",
-                            payload,
-                        );
+                        await apiFetch(`/api/tracking/items/${itemId}`, "PATCH", payload);
                     } else {
                         await apiFetch("/api/tracking/items", "POST", {
                             category_id: catId,
-                            ...(slug ? { slug } : {}),
+                            tracking_mode: "zaehler",
                             ...payload,
                         });
                     }
@@ -2056,7 +1491,9 @@ function build(core, root) {
                 overlay.style.cssText =
                     "position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:flex;align-items:flex-end;justify-content:center;";
                 overlay.innerHTML = `<div onclick="event.stopPropagation()" style="background:#161616;border:1px solid rgba(255,255,255,.12);border-radius:16px 16px 0 0;padding:1.5rem 1.25rem 2.5rem;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">${html}</div>`;
-                overlay.addEventListener("click", closeSheet);
+                // Nach dem Gedrückthalten feuert der Finger-Loslassen-Klick evtl. auf dem frischen Overlay
+                const born = Date.now();
+                overlay.addEventListener("click", () => { if (Date.now() - born > 500) closeSheet(); });
                 // Im Modul-Container, NICHT an <body>: das Modul-CSS (.m-habits …) greift nur darin
                 root.appendChild(overlay);
             }
@@ -2065,290 +1502,104 @@ function build(core, root) {
             }
 
             /* ════════════════════════════════════════════════════════════════
-   BUTTON RENDERING
+   BUTTONS + EINTRAG
    ════════════════════════════════════════════════════════════════ */
-            // Renders quick-tap buttons for an item.
-            // If item.buttons is defined and non-empty, use those.
-            // Otherwise fall back to single button from unit_size + counter_direction.
+            // Schnell-Buttons eines Items. Antippen = sofort buchen, gedrückt halten = Sheet (siehe Press-Handler)
             function renderItemButtons(item) {
-                const buttons =
-                    Array.isArray(item.buttons) && item.buttons.length > 0
-                        ? item.buttons
-                        : [
-                              {
-                                  label: `${(item.counter_direction || "+") === "-" ? "−" : "+"}${fmtAmt(parseFloat(item.unit_size) || 1, item)}`,
-                                  amount:
-                                      (item.counter_direction || "+") === "-"
-                                          ? -(parseFloat(item.unit_size) || 1)
-                                          : parseFloat(item.unit_size) || 1,
-                              },
-                          ];
-
-                return buttons
+                return itemButtons(item)
                     .map((btn) => {
                         const amt = parseFloat(btn.amount) || 0;
-                        const isNegBtn = amt < 0;
-                        const color = isNegBtn
-                            ? "rgba(255,0,81,.4)"
-                            : "rgba(74,222,128,.4)";
-                        const txtColor = isNegBtn
-                            ? "var(--accent-red)"
-                            : "var(--green)";
-                        const safeAmt = JSON.stringify(amt);
-                        const safeLbl = btn.label.replace(/'/g, "&#39;");
-                        return `<button class="btn-unit"
-                        onclick="HB.tapButton('${item.id}',${safeAmt},'${safeLbl}')"
-                        style="border-color:${color};color:${txtColor}">${btn.label}</button>`;
+                        const color = amt < 0 ? "rgba(255,0,81,.4)" : "rgba(74,222,128,.4)";
+                        const txtColor = amt < 0 ? "var(--accent-red)" : "var(--green)";
+                        return `<button class="btn-unit" data-tap data-item="${item.id}" data-amt="${amt}" data-lbl="${core.esc(btn.label)}"
+                        style="border-color:${color};color:${txtColor}">${core.esc(btn.label)}</button>`;
                     })
                     .join("");
             }
 
-            /* ════════════════════════════════════════════════════════════════
-   ENTRY ACTIONS (logging)
-   ════════════════════════════════════════════════════════════════ */
-            // tapButton — unified handler for all quick-tap buttons
+            async function postEntry(item, amount, note, timestamp) {
+                const when = timestamp ? new Date(timestamp) : null;
+                return apiFetch("/api/tracking/entry", "POST", {
+                    item_id: item.id,
+                    category: item.category,
+                    name: item.name,
+                    amount,
+                    unit: item.base_unit,
+                    entry_type: "zaehler",
+                    note: note || null,
+                    date: when ? core.dayKey(when) : todayKey(),
+                    ...(when ? { timestamp: when.toISOString() } : {}),
+                    source: "pwa",
+                });
+            }
+
             async function tapButton(itemId, signedAmt, label) {
                 const item = itemById(itemId);
                 if (!item) return;
-
-                const entryType =
-                    item.tracking_mode === "zaehler" ? "zaehler" : "delta";
-                const entries = [{ item, amount: signedAmt, entryType }];
-
-                // Linked items
-                const linked = Array.isArray(item.linked_items)
-                    ? item.linked_items
-                    : [];
-                linked.forEach((link) => {
-                    const linkedItem = allItems().find(
-                        (i) =>
-                            i.slug === link.item_slug ||
-                            i.id === link.item_slug,
-                    );
-                    if (!linkedItem) return;
-                    const linkedType =
-                        linkedItem.tracking_mode === "zaehler"
-                            ? "zaehler"
-                            : "delta";
-                    entries.push({
-                        item: linkedItem,
-                        amount: parseFloat(link.amount),
-                        entryType: linkedType,
-                    });
-                });
-
-                // Build batch payload
-                const td = todayKey();
-                const payload = entries.map((e) => ({
-                    item_id: e.item.id,
-                    category: e.item.category,
-                    name: e.item.name,
-                    amount: e.amount,
-                    unit: e.item.base_unit,
-                    entry_type: e.entryType,
-                    date: td,
-                    source: "pwa",
-                }));
-
-                if (payload.length === 1) {
-                    await apiFetch("/api/tracking/entry", "POST", payload[0]);
-                } else {
-                    await apiFetch("/api/tracking/entries/batch", "POST", {
-                        entries: payload,
-                    });
+                try {
+                    await postEntry(item, signedAmt);
+                } catch (e) {
+                    showToast("Fehler: " + e.message);
+                    return;
                 }
-
-                const dir = signedAmt < 0 ? "−" : "+";
-                const absAmt = Math.abs(signedAmt);
-                const linkedNames = linked.map((l) => {
-                    const li = allItems().find(
-                        (i) => i.slug === l.item_slug || i.id === l.item_slug,
-                    );
-                    return li ? li.name : l.item_slug;
-                });
-                const suffix = linkedNames.length
-                    ? ` · ${linkedNames.join(", ")} −1`
-                    : "";
-                showToast(`${item.name} ${label}${suffix}`);
+                showToast(`${item.name} ${label}`);
                 await loadAll();
             }
 
-            async function quickAdd(itemId) {
+            // Eintrag-Sheet: Menge, Uhrzeit (Standard: jetzt), Notiz. `amount` kommt vom gedrückten Button.
+            function openEntry(itemId, amount) {
                 const item = itemById(itemId);
                 if (!item) return;
-                const amt = parseFloat(item.unit_size) || 1;
-                const dir = item.counter_direction || "+";
-                const signedAmt = dir === "-" ? -amt : amt;
-                await tapButton(
-                    itemId,
-                    signedAmt,
-                    `${dir === "-" ? "−" : "+"}${fmtAmt(amt, item)}`,
-                );
-            }
-
-            async function quickVorrat(itemId) {
-                const item = itemById(itemId);
-                if (!item) return;
-                const amt = parseFloat(item.unit_size) || 1;
-                const dir = item.counter_direction || "+";
-                const signedAmt = dir === "-" ? -amt : amt;
-                await tapButton(
-                    itemId,
-                    signedAmt,
-                    `${dir === "-" ? "−" : "+"}${fmtAmt(amt, item)}`,
-                );
-            }
-
-            function openEntry(itemId) {
-                const item = itemById(itemId);
-                if (!item) return;
-                _overlayItem = item;
-                _overlayVorratMode =
-                    (item.counter_direction || "+") === "-"
-                        ? "entnahme"
-                        : "auffuellung";
-
-                document.getElementById("overlay-name").textContent = item.name;
-                document.getElementById("overlay-unit").textContent =
-                    item.base_unit;
-                document.getElementById("overlay-amount").value = "";
-                document.getElementById("overlay-note").value = "";
-                document.getElementById("overlay-msg").textContent = "";
-
-                const hint = document.getElementById("bestand-hint");
-                const fieldLabel = document.getElementById(
-                    "overlay-field-label",
-                );
-
-                if (
-                    item.tracking_mode === "vorrat" ||
-                    item.tracking_mode === "bestand"
-                ) {
-                    const vd = vorratBestand(item.id);
-                    const bestandStr = vd ? fmtAmt(vd.bestand, item) : "—";
-                    hint.style.display = "block";
-                    hint.innerHTML = `
-                        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:.6rem">
-                            Aktueller Vorrat: <strong style="color:var(--text)">${bestandStr}</strong>
+                const amt = amount || parseFloat(item.unit_size) || 1;
+                showSheet(`
+                    <div class="sheet-label">Eintrag</div>
+                    <div class="sheet-title">${core.esc(item.name)}</div>
+                    <div class="sheet-row">
+                        <div class="sheet-label" style="margin-bottom:4px">Menge</div>
+                        <div class="input-row" style="margin-bottom:0">
+                            <input id="en-amount" type="number" step="any" value="${amt}">
+                            <span class="input-unit">${core.esc(item.base_unit)}</span>
                         </div>
-                        <div style="display:flex;gap:.4rem">
-                            <button class="sheet-toggle-btn" id="vr-fill" onclick="HB.setVorratMode('auffuellung')"
-                                style="flex:1;border-color:rgba(74,222,128,.4);color:var(--green)">+ Auffüllen</button>
-                            <button class="sheet-toggle-btn" id="vr-take" onclick="HB.setVorratMode('entnahme')"
-                                style="flex:1;border-color:rgba(255,0,81,.3);color:var(--accent-red)">− Entnahme</button>
-                        </div>`;
-                    setTimeout(() => setVorratMode(_overlayVorratMode), 0);
-                    fieldLabel.textContent = "Menge";
-                    document.getElementById("overlay-amount").placeholder =
-                        String(item.unit_size || 1);
-                } else {
-                    hint.style.display = "none";
-                    const dir = item.counter_direction || "+";
-                    fieldLabel.textContent =
-                        dir === "-" ? "Menge (wird abgezogen)" : "Menge";
-                    document.getElementById("overlay-amount").placeholder =
-                        String(item.unit_size || 1);
-                }
-
-                const presetsEl = document.getElementById("overlay-presets");
-                presetsEl.innerHTML = "";
-                const ps = (item.presets || "")
-                    .split(",")
-                    .map((p) => p.trim())
-                    .filter(Boolean);
-                ps.forEach((p) => {
-                    presetsEl.innerHTML += `<button class="preset-btn" onclick="document.getElementById('overlay-amount').value='${p}'">${p} ${item.base_unit}</button>`;
-                });
-                if (item.pack_size && item.pack_unit) {
-                    const packAmt = parseFloat(item.pack_size);
-                    presetsEl.innerHTML += `<button class="preset-btn" style="border-color:var(--border-hover);color:var(--text)"
-                        onclick="document.getElementById('overlay-amount').value='${packAmt}'">1 ${item.pack_unit} (${packAmt} ${item.base_unit})</button>`;
-                }
-
-                document.getElementById("overlay").style.display = "flex";
-                setTimeout(
-                    () => document.getElementById("overlay-amount").focus(),
-                    100,
-                );
+                    </div>
+                    <div class="sheet-row">
+                        <div class="sheet-label" style="margin-bottom:4px">Zeitpunkt</div>
+                        <input class="sheet-input" id="en-time" type="datetime-local" value="${core.isoToDatetimeLocal(new Date().toISOString())}">
+                    </div>
+                    <div class="sheet-row">
+                        <div class="sheet-label" style="margin-bottom:4px">Notiz (optional)</div>
+                        <input class="sheet-input" id="en-note" type="text" placeholder="optional">
+                    </div>
+                    <div class="sheet-btns" style="margin-top:1rem">
+                        <button class="btn-save" onclick="HB.submitEntry('${item.id}')">Eintragen</button>
+                        <button class="btn-cancel" onclick="HB.closeSheet()">Abbrechen</button>
+                    </div>
+                    <div id="sheet-msg" style="font-family:'DM Mono',monospace;font-size:11px;margin-top:.5rem;text-align:center"></div>
+                `);
             }
 
-            function setVorratMode(mode) {
-                _overlayVorratMode = mode;
-                const fillBtn = document.getElementById("vr-fill");
-                const takeBtn = document.getElementById("vr-take");
-                if (fillBtn) {
-                    fillBtn.style.background =
-                        mode === "auffuellung" ? "rgba(74,222,128,.1)" : "none";
-                    fillBtn.style.fontWeight =
-                        mode === "auffuellung" ? "600" : "400";
-                }
-                if (takeBtn) {
-                    takeBtn.style.background =
-                        mode === "entnahme" ? "rgba(255,0,81,.08)" : "none";
-                    takeBtn.style.fontWeight =
-                        mode === "entnahme" ? "600" : "400";
-                }
-            }
-
-            function closeOverlay(e) {
-                document.getElementById("overlay").style.display = "none";
-            }
-
-            async function submitEntry() {
-                const item = _overlayItem;
+            async function submitEntry(itemId) {
+                const item = itemById(itemId);
                 if (!item) return;
-                const raw = parseFloat(
-                    document.getElementById("overlay-amount").value,
-                );
-                const note =
-                    document.getElementById("overlay-note").value || null;
-                const msg = document.getElementById("overlay-msg");
-                if (!raw || raw <= 0) {
-                    document.getElementById("overlay-amount").focus();
+                const amount = parseFloat(document.getElementById("en-amount").value);
+                const timeVal = document.getElementById("en-time").value;
+                const note = document.getElementById("en-note").value.trim() || null;
+                const msg = document.getElementById("sheet-msg");
+                if (!amount || isNaN(amount) || !timeVal) {
+                    msg.style.color = "var(--accent-red)";
+                    msg.textContent = "Menge und Zeitpunkt sind Pflicht";
                     return;
                 }
                 msg.style.color = "var(--muted)";
                 msg.textContent = "Speichere…";
-
-                let entryType, toastStr;
-                if (
-                    item.tracking_mode === "vorrat" ||
-                    item.tracking_mode === "bestand"
-                ) {
-                    entryType = _overlayVorratMode;
-                    toastStr =
-                        entryType === "auffuellung"
-                            ? `${item.name} +${fmtAmt(raw, item)} aufgefüllt`
-                            : `${item.name} −${fmtAmt(raw, item)} entnommen`;
-                } else {
-                    entryType = "zaehler";
-                    const dir = item.counter_direction || "+";
-                    toastStr = `${item.name} ${dir === "-" ? "−" : "+"}${fmtAmt(raw, item)}`;
-                }
-
                 try {
-                    await postEntry(item.id, raw, entryType, note, item);
-                    document.getElementById("overlay").style.display = "none";
-                    showToast(toastStr);
+                    await postEntry(item, amount, note, timeVal);
+                    closeSheet();
+                    showToast(`${item.name} ${autoLabel(amount, item.base_unit)}`);
                     await loadAll();
                 } catch (e) {
                     msg.style.color = "var(--accent-red)";
                     msg.textContent = "Fehler: " + e.message;
                 }
-            }
-
-            async function postEntry(itemId, amount, entryType, note, item) {
-                return apiFetch("/api/tracking/entry", "POST", {
-                    item_id: itemId,
-                    category: item.category,
-                    name: item.name,
-                    amount,
-                    unit: item.base_unit,
-                    entry_type: entryType,
-                    note: note || null,
-                    date: todayKey(),
-                    source: "pwa",
-                });
             }
 
             async function deleteEntry(entryId) {
@@ -2456,27 +1707,56 @@ function build(core, root) {
 
             /* ── Lifecycle (Gesamt-App): Listener/Overlays sauber aufräumen ── */
             const onKeydown = (e) => {
-                if (
-                    e.key === "Enter" &&
-                    document.getElementById("overlay").style.display !== "none"
-                )
-                    submitEntry();
-                if (e.key === "Escape") {
-                    document.getElementById("overlay").style.display = "none";
-                    closeSheet();
-                }
+                if (e.key === "Escape") closeSheet();
             };
+
+            // Antippen = sofort buchen, gedrückt halten (450 ms) = Eintrag-Sheet mit Uhrzeit.
+            // Delegiert am Container, damit es nach jedem Neuzeichnen der Heute-Liste weiter greift.
+            let pressTimer = null;
+            let pressFired = false;
+            const heute = () => document.getElementById("heute-content");
+            const onPressStart = (e) => {
+                const b = e.target.closest("[data-tap]");
+                pressFired = false;
+                clearTimeout(pressTimer);
+                if (!b) return;
+                pressTimer = setTimeout(() => {
+                    pressFired = true;
+                    if (navigator.vibrate) navigator.vibrate(15);
+                    openEntry(b.dataset.item, parseFloat(b.dataset.amt));
+                }, 450);
+            };
+            const onPressEnd = () => clearTimeout(pressTimer);
+            const onHeuteClick = (e) => {
+                const tap = e.target.closest("[data-tap]");
+                if (tap) {
+                    if (pressFired) { pressFired = false; return; }
+                    return tapButton(tap.dataset.item, parseFloat(tap.dataset.amt), tap.dataset.lbl);
+                }
+                const manual = e.target.closest("[data-manual]");
+                if (manual) openEntry(manual.dataset.manual);
+            };
+            const onHeuteMenu = (e) => { if (e.target.closest("[data-tap]")) e.preventDefault(); };
+
             function init() {
                 document.addEventListener("keydown", onKeydown);
+                const h = heute();
+                h.addEventListener("pointerdown", onPressStart);
+                h.addEventListener("pointerup", onPressEnd);
+                h.addEventListener("pointercancel", onPressEnd);
+                h.addEventListener("pointerleave", onPressEnd);
+                h.addEventListener("click", onHeuteClick);
+                h.addEventListener("contextmenu", onHeuteMenu);
                 return loadAll();
             }
             function dispose() {
                 document.removeEventListener("keydown", onKeydown);
                 clearTimeout(toastTimer);
+                clearTimeout(pressTimer);
                 document.getElementById("sheet-edit-overlay")?.remove();
             }
 
-  window.HB = { pad, todayKey, fmtAmt, localTimeStr, localDateStr, allItems, itemBySlug, itemById, entriesForItem, zaehlerToday, vorratBestand, vorratHasAnyEntries, vorratTodayUsed, wtLinkedDeduction, wtLinkedDeductionForDay, fmtAmtWithPack, zaehlerTodayNet, catColorClass, loadAll, renderToday, renderVerlauf, renderEinstellungen, renderSettingsCat, toggleCat, openCatSheet, selectEmoji, selectColor, saveCat, deleteCat, openItemSheet, selectDir, selectMode, selectUnit, saveItem, deleteItem, showSheet, closeSheet, renderItemButtons, tapButton, quickAdd, quickVorrat, openEntry, setVorratMode, closeOverlay, submitEntry, postEntry, deleteEntry, isoToDatetimeLocal, openEditEntrySheet, saveEditedEntry, switchTab, showToast, init, dispose };
+  window.HB = { fmtAmt, itemById, allItems, loadAll, renderToday, renderVerlauf, renderEinstellungen, renderSettingsCat, toggleCat, openCatSheet, selectEmoji, selectColor, saveCat, deleteCat, openItemSheet, selectUnit, addBtnRow, saveItem, deleteItem, showSheet, closeSheet, tapButton, openEntry, submitEntry, deleteEntry, openEditEntrySheet, saveEditedEntry, switchTab, showToast, init, dispose };
   return { init, dispose };
 }
 

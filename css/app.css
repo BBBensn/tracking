@@ -12,6 +12,11 @@
 
 body { overscroll-behavior: none; }
 
+/* Kein Doppeltipp-Zoom in der ganzen App (iOS Safari): `manipulation` erlaubt Scrollen und
+   Pinch-Zoom, schaltet aber das Doppeltipp-Zoomen und die 300-ms-Klickverzögerung ab. Gilt für
+   alle Elemente, weil Doppeltipps auch auf Buttons/Text/Eingabefeldern passieren, nicht nur auf dem Hintergrund */
+* { touch-action: manipulation; }
+
 /* ── Inhalt ── */
 /* Bewusst KEIN z-index: sonst entsteht ein Stacking-Context, und die Sheets der Module
    (z-index 100) würden unter die Tab-Leiste (z-index 50) rutschen statt sie zu überdecken. */

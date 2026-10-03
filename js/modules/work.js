@@ -997,7 +997,9 @@ function build(core, root) {
       const data=await apiFetch('/api/shift/current');
       renderActive(data);
     }catch(e){
-      document.getElementById('activeContent').innerHTML=`<div class="state-msg">Verbindungsfehler<br><span style="color:var(--accent-red);font-size:11px">${e.message}</span></div>`;
+      const box=document.getElementById('activeContent');
+      if(!box) return;   // Modul wurde währenddessen verlassen
+      box.innerHTML=`<div class="state-msg">Verbindungsfehler<br><span style="color:var(--accent-red);font-size:11px">${e.message}</span></div>`;
     }
   }
 

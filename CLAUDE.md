@@ -9,15 +9,15 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Gesamt-App: Work, Health, Food, Habits — PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v2.0.0 (Gesamt-App live im Root; alte Habit-Seite als Rückfall unter /legacy/)
+- **Version:** v2.1.0 (Gesamt-App live im Root; Habits reine Zähler-Logik mit Gedrückthalten-Eintrag; alte Habit-Seite als Rückfall unter /legacy/)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
 ## Zweck
 
 Config-getriebener Habit-/Konsum-Tracker, Fokus auf Zähler-artigem Habit-Tracking: Redbull,
-Zigaretten/Spicy/Ofen, Weed, Tabak, Fun. Vorrat-Tracking (Bestand statt Konsum) ist seit v1.6.0
-bewusst Nebensache und nur noch für Kaffee aktiv — visuell zurückgestuft (siehe Konventionen).
+Zigaretten/Spicy/Ofen, Weed, Tabak, Fun. Vorrat-Tracking (Bestand statt Konsum) gibt es seit
+v2.1.0 in der App nicht mehr (alte Vorrat-Einträge bleiben im Verlauf lesbar).
 Medikamente werden seit v1.6.0 in `health.bensn.me` getrackt, nicht mehr hier. Keine
 Item-spezifische Logik im Code — alles läuft über `tracking_categories`/`tracking_items`
 (Admin-UI im "Einstellungen"-Tab), Einträge über `tracking_entries`.
@@ -97,11 +97,13 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
 - **DB-Zugriffe (im hub-api-Code):** `db_query()` / `db_insert()` Helper — kein ORM
 - **Kein Item-spezifischer Code:** neue Konsum-Items/Kategorien werden ausschließlich über die
   Einstellungen-UI angelegt, nie hardcoded im Frontend
-- **`vorrat` vs. `zaehler`:** beide Tracking-Modi bleiben als Mechanismus bestehen (inkl.
-  `linked_items` Cross-Deduction), aber der Habit-Tracker-Fokus liegt seit v1.6.0 auf `zaehler`
-  (Konsum-Events zählen/summieren). `vorrat`-Items (Bestand, der schrumpft) werden in der
-  Heute-Ansicht bewusst ans Ende ihrer Kategorie sortiert und mit `.item-card-vorrat`
-  (reduzierte Opazität) visuell zurückgestuft — aktuell nur noch Kaffee
+- **Nur Zähler (seit v2.1.0):** die App legt und bucht ausschließlich `zaehler`-Items. Vorrat/Bestand,
+  `linked_items` (Verknüpfte Buchungen), Packungshierarchie und Presets sind aus UI und Logik
+  entfernt; die DB-Spalten bleiben unangetastet (alte Einträge/Items bleiben lesbar, die
+  deaktivierten Vorrat-Items stehen weiter im Verlauf). Ein Item besteht aus Name, Einheit und
+  Buttons (Menge + optionale Beschriftung, negative Menge zieht ab); Slug entsteht automatisch.
+  **Buchen:** Antippen eines Buttons = sofort, Gedrückthalten (450 ms) oder Stift = Eintrag-Sheet
+  mit Menge, Uhrzeit, Notiz (`POST /api/tracking/entry` mit `timestamp`, `date` rechnet der Server)
 - **Cross-App-Designsprache:** kleine Aktions-Buttons (Bearbeiten/Löschen) sind `.btn-pill`
   (geborderte DM-Mono-Buttons) — identische Klasse wie in `health.bensn.me` und `feed.bensn.me`,
   1:1 aus `worktracker`s Button-Stil übernommen. Kein Bare-Text-Link für Aktionen.
@@ -215,6 +217,7 @@ gefahrlos testen: `ssh bensn 'bash -s up' < tracking/tools/testmode.sh` legt ein
 | v1.10.0 | Gesamt-App-Vorschau: Modul **Habits** (aus tracking.bensn.me übernommen: Zähler, Vorrat, Verlauf, Einstellungen, Arbeits-Verknüpfung); Red Bull/Holy/Kaffee nach Food migriert; Sub-Nav-Abstand oben wieder 1,25 rem (war beim Umbau auf sticky versehentlich auf 0,5 rem geschrumpft) | ✅ deployed (2026-10-03) |
 | v1.11.0 | Gesamt-App-Vorschau: Mahlzeiten aus dem Health-Modul entfernt (Heute-Button, Verlauf, Dashboard-Kachel, Bearbeiten) — Food/Getränke nur noch in Food; Habits lädt mit 3 statt 104 Requests (`/api/smoke-breaks`, ~0,3 s); Arbeits-Zigaretten stehen je Pause chronologisch im Habits-Verlauf; Habits-Bearbeiten-Sheet war ungestylt (Overlay hing an `<body>` außerhalb des Modul-CSS), Work-Overlays ebenfalls in den Modul-Container verlegt | ✅ deployed (2026-10-04) |
 | v2.0.0 | **Cutover:** Gesamt-App im Root von tracking.bensn.me (Work, Health, Food, Habits), alte Vhosts worktracker./health. leiten um (APIs bleiben), neuer Service Worker, einheitlicher Verlauf mit Kalenderansicht in allen Trackern, Work-Tab Eingabe, Medikamente in Tropfen, Food-Sheet-Layout | ✅ deployed (2026-10-04) |
+| v2.1.0 | Habits: Eintrag-Stift war kaputt (`_overlayVorratMode` fehlte) → neues Eintrag-Sheet mit Uhrzeit; Gedrückthalten eines Buttons öffnet es; Item-Editor auf Name/Einheit/Button-Liste reduziert (kein Vorrat, keine Verknüpfungen, keine Packungen/Presets); Health: Medikamente mit Wirkstoffmenge in mg/µg/g/IE bzw. mg/ml, µg/ml, IE/ml und üblicher Menge je Einnahme; app-weit kein Doppeltipp-Zoom (`touch-action: manipulation`) | ✅ deployed (2026-10-04) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 

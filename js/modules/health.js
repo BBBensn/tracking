@@ -306,7 +306,11 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
           <button class="tag-btn active" data-unit="tablet" onclick="HL.setNewMedUnit('tablet', this)">Tabletten</button>
           <button class="tag-btn" data-unit="drops" onclick="HL.setNewMedUnit('drops', this)">Tropfen</button>
         </div>
-        <div class="input-row"><input type="number" id="newMedDose" placeholder="Dosis" step="0.5" /><span class="input-unit" id="newMedDoseUnit">mg je Tablette</span></div>
+        <div class="sheet-label">Wirkstoffmenge <span id="newMedDoseHint">je Tablette</span></div>
+        <div class="input-row"><input type="number" id="newMedDose" placeholder="Menge" step="any" inputmode="decimal" /></div>
+        <div class="tag-picker" id="newMedDoseUnitPicker"></div>
+        <div class="sheet-label">Menge pro Einnahme</div>
+        <div class="input-row"><input type="number" id="newMedCount" min="1" max="999" step="1" value="1" inputmode="numeric" /><span class="input-unit" id="newMedCountUnit">Tabletten</span></div>
         <div class="tag-picker">
           <button class="tag-btn" id="newMedPrnToggle" onclick="HL.toggleNewMedPrn(this)">Bedarfsorientiert (PRN)</button>
         </div>
@@ -446,6 +450,12 @@ function build(core) {
       let _noteLogId = null;
       let _newMedPrn = false;
       let _newMedUnit = "tablet";
+      let _newMedDoseUnit = "mg";
+      // Auswahl der Einheit für die Wirkstoffmenge je Darreichungsform (Server: DOSE_UNITS)
+      const DOSE_UNIT_CHOICES = {
+        tablet: ["mg", "µg", "g", "IE"],
+        drops: ["IE/ml", "mg/ml", "µg/ml", "mg", "µg", "IE"],
+      };
       let _apiOnline = false;
 
       /* ════════════ TABS ════════════ */
@@ -503,13 +513,14 @@ function build(core) {
 
       const medById = (id) => _lastActiveMeds.find((m) => m.id === id);
       const isDrops = (m) => !!m && m.unit === "drops";
-      // Zuletzt bestätigte Tropfenzahl je Medikament merken (typisch immer dieselbe Menge)
-      function lastDrops(medId) {
-        try { return parseInt(localStorage.getItem("bensn.drops." + medId)) || 1; } catch (_) { return 1; }
+      // Wirkstoffmenge als Text: "10 mg", "5 µg/Tropfen" (Menge je Tropfen) oder "20000 IE/ml" (Konzentration)
+      function doseLabel(m) {
+        if (m.dose_mg == null || m.dose_mg === "") return "";
+        const u = m.dose_unit || "mg";
+        const perDrop = isDrops(m) && !u.endsWith("/ml");
+        return `${parseFloat(m.dose_mg)} ${u}${perDrop ? "/Tropfen" : ""}`;
       }
-      function rememberDrops(medId, n) {
-        try { localStorage.setItem("bensn.drops." + medId, String(n)); } catch (_) { /* privat/geblockt */ }
-      }
+      let _medConfirmFor = null;   // für welches Medikament die Bestätigungsleiste zuletzt vorbelegt wurde
       function toggleMedSelect(medId) {
         if (_selectedMedIds.has(medId)) {
           _selectedMedIds.delete(medId);
@@ -541,38 +552,52 @@ function build(core) {
             const wrap = document.getElementById("medConfirmDropsWrap");
             wrap.style.display = drops ? "flex" : "none";
             const inp = document.getElementById("medConfirmDrops");
-            if (drops && inp.dataset.med !== onlyMed.id) { inp.value = lastDrops(onlyMed.id); inp.dataset.med = onlyMed.id; }
+            if (_medConfirmFor !== onlyMed.id) {
+              _medConfirmFor = onlyMed.id;
+              _medConfirmCount = onlyMed.default_count || 1;   // übliche Menge des Medikaments vorbelegen
+              inp.value = _medConfirmCount;
+            }
           } else {
             countRow.style.display = "none";
+            _medConfirmFor = null;
             _medConfirmCount = 1;
           }
           document.getElementById("medConfirmCountVal").textContent = _medConfirmCount;
         } else {
           bar.classList.remove("visible");
           timeInput.value = "";
+          _medConfirmFor = null;
           _medConfirmCount = 1;
         }
       }
       function stepMedConfirmCount(delta) {
-        _medConfirmCount = Math.max(1, Math.min(10, _medConfirmCount + delta));
+        _medConfirmCount = Math.max(1, Math.min(99, _medConfirmCount + delta));
         document.getElementById("medConfirmCountVal").textContent = _medConfirmCount;
       }
       function cancelMedSelection() {
         _selectedMedIds.clear();
+        _medConfirmFor = null;
         _medConfirmCount = 1;
         renderMedChecklistDOM();
       }
       async function confirmMedSelection() {
         const iso = toIsoOrNull(document.getElementById("medConfirmTime").value);
         const ids = Array.from(_selectedMedIds);
-        let count = _medConfirmCount;
         const only = ids.length === 1 ? medById(ids[0]) : null;
-        if (isDrops(only)) {
-          count = parseInt(document.getElementById("medConfirmDrops").value);
-          if (!count || count < 1) return alert("Anzahl Tropfen angeben");
-          rememberDrops(only.id, count);
+        // Menge je Medikament: Tropfen aus dem Eingabefeld, einzelnes Bedarfsmedikament aus dem Stepper,
+        // sonst die übliche Menge des Medikaments (Standard 1)
+        const countFor = (id) => {
+          const m = medById(id);
+          if (only && isDrops(only)) return parseInt(document.getElementById("medConfirmDrops").value);
+          if (only && only.is_prn) return _medConfirmCount;
+          return (m && m.default_count) || 1;
+        };
+        if (only && isDrops(only)) {
+          const n = countFor(only.id);
+          if (!n || n < 1) return alert("Anzahl Tropfen angeben");
         }
-        await Promise.all(ids.map((id) => apiFetch("/api/medication-log", "POST", { medication_id: id, taken_at: iso, count })));
+        await Promise.all(ids.map((id) => apiFetch("/api/medication-log", "POST", { medication_id: id, taken_at: iso, count: countFor(id) })));
+        _medConfirmFor = null;
         _medConfirmCount = 1;
         await loadMedChecklist();
       }
@@ -581,6 +606,7 @@ function build(core) {
       function openMedCreateSheet() {
         document.getElementById("newMedName").value = "";
         document.getElementById("newMedDose").value = "";
+        document.getElementById("newMedCount").value = 1;
         document.getElementById("newMedValidFrom").value = todayKey();
         document.getElementById("newMedValidTo").value = "";
         document.getElementById("newMedNotes").value = "";
@@ -592,7 +618,16 @@ function build(core) {
       function setNewMedUnit(unit, btn) {
         _newMedUnit = unit;
         btn.parentElement.querySelectorAll(".tag-btn").forEach((b) => b.classList.toggle("active", b === btn));
-        document.getElementById("newMedDoseUnit").textContent = unit === "drops" ? "mg je Tropfen" : "mg je Tablette";
+        document.getElementById("newMedCountUnit").textContent = unit === "drops" ? "Tropfen" : "Tabletten";
+        setNewMedDoseUnit(DOSE_UNIT_CHOICES[unit][0]);
+      }
+      function setNewMedDoseUnit(u) {
+        _newMedDoseUnit = u;
+        document.getElementById("newMedDoseUnitPicker").innerHTML = DOSE_UNIT_CHOICES[_newMedUnit]
+          .map((x) => `<button class="tag-btn ${x === u ? "active" : ""}" onclick="HL.setNewMedDoseUnit('${x}')">${x}</button>`)
+          .join("");
+        document.getElementById("newMedDoseHint").textContent =
+          _newMedUnit === "tablet" ? "je Tablette" : u.endsWith("/ml") ? "je ml Lösung" : "je Tropfen";
       }
       function toggleNewMedPrn(btn) {
         _newMedPrn = !_newMedPrn;
@@ -605,6 +640,8 @@ function build(core) {
         await apiFetch("/api/medications", "POST", {
           name,
           dose_mg: parseFloat(document.getElementById("newMedDose").value) || null,
+          dose_unit: _newMedDoseUnit,
+          default_count: parseInt(document.getElementById("newMedCount").value) || 1,
           is_prn: _newMedPrn,
           unit: _newMedUnit,
           valid_from: document.getElementById("newMedValidFrom").value || null,
@@ -719,7 +756,7 @@ function build(core) {
         // genommen) — nur tägliche Medikamente zeigen den erledigt-Status persistent.
         const showDone = a && a.taken_today && !m.is_prn;
         const isSelected = _selectedMedIds.has(m.id);
-        const doseLabel = m.dose_mg ? `${m.dose_mg}mg${isDrops(m) ? "/Tropfen" : ""}` : "";
+        const doseText = doseLabel(m);
         const countLabel = a && a.taken_count_today
           ? `${a.taken_count_today}${isDrops(m) ? " Tropfen" : "×"} heute${a.last_taken_at ? " · zuletzt " + fmtTime(a.last_taken_at) : ""}`
           : "";
@@ -731,7 +768,7 @@ function build(core) {
             <div class="med-check-box">${showDone ? "✓" : isSelected ? "●" : ""}</div>
             <div class="med-check-main">
               <div class="med-check-name">${m.name}${m.is_prn ? ' <span class="pill prn">PRN</span>' : ""}</div>
-              <div class="med-check-sub">${[doseLabel, countLabel].filter(Boolean).join(" · ")}</div>
+              <div class="med-check-sub">${[doseText, countLabel].filter(Boolean).join(" · ")}</div>
               ${editTimeBtn}
             </div>
           </div>`;
@@ -760,7 +797,6 @@ function build(core) {
       }
 
       function renderMedProfileCard(m, isActive) {
-        const doseLabel = m.dose_mg ? `${m.dose_mg}mg${m.unit === "drops" ? "/Tropfen" : ""}` : "";
         const period = `${fmtDate(m.valid_from)} – ${m.valid_to ? fmtDate(m.valid_to) : "heute"}`;
         return `
           <div class="med-profile-card">
@@ -771,9 +807,9 @@ function build(core) {
                 ${m.unit === "drops" ? '<span class="pill">Tropfen</span>' : ""}
                 ${isActive ? '<span class="pill active">Aktiv</span>' : ""}
               </div>
-              <div class="med-profile-dose">${doseLabel}</div>
+              <div class="med-profile-dose">${doseLabel(m)}</div>
             </div>
-            <div class="med-profile-period">${period}</div>
+            <div class="med-profile-period">${period}${(m.default_count || 1) > 1 ? ` · üblich ${m.default_count} ${m.unit === "drops" ? "Tropfen" : "Tabletten"}` : ""}</div>
             ${m.notes ? `<div class="med-profile-notes">${m.notes}</div>` : ""}
             <div style="display:flex;gap:1rem;margin-top:4px">
               ${isActive ? `<button class="btn-pill" onclick="HL.endMedication('${m.id}')">Beenden</button>` : ""}
@@ -858,7 +894,7 @@ function build(core) {
             return {
               type: "med", id: m.id, time: m.taken_at,
               title: drops ? m.medication_name : (m.count > 1 ? `${m.count}× ` : "") + m.medication_name,
-              sub: drops ? `${m.count} Tropfen${m.dose_mg ? ` · ${m.dose_mg}mg/Tropfen` : ""}` : (m.dose_mg ? `${m.dose_mg}mg` : ""),
+              sub: [drops ? `${m.count} Tropfen` : "", doseLabel({ ...m, unit: m.unit })].filter(Boolean).join(" · "),
               logId: m.id, medName: m.medication_name, effectNotes: m.effect_notes || [],
             };
           }),
@@ -1281,7 +1317,7 @@ function build(core) {
       /* ════════════ INIT ════════════ */
       async function init() { await loadMedChecklist(); }
 
-  window.HL = { setNewMedUnit, switchTab, openSheet, closeSheet, capitalize, setYesNoToggle, renderEffectTagsInto, toggleNoteEffect, toggleMedSelect, renderMedConfirmBar, stepMedConfirmCount, cancelMedSelection, confirmMedSelection, openMedCreateSheet, toggleNewMedPrn, saveNewMed, endMedication, openMedNoteSheet, saveMedNote, saveBp, saveWeight, loadMedChecklist, renderMedChecklistDOM, renderMedChecklistRow, loadMedProfiles, renderMedProfileCard, deleteMedication, fmtDate, loadVerlauf, openEditTimeSheet, saveEditedTime, openEditEntrySheet, stepEditEntryCount, saveEditEntry, deleteEditEntry, fmtTime, dayKeyVienna, dayLabelFor, groupByDayHtml, loadDashboard, loadOura, openHistoryModal, drawSparkline, init };
+  window.HL = { setNewMedUnit, setNewMedDoseUnit, switchTab, openSheet, closeSheet, capitalize, setYesNoToggle, renderEffectTagsInto, toggleNoteEffect, toggleMedSelect, renderMedConfirmBar, stepMedConfirmCount, cancelMedSelection, confirmMedSelection, openMedCreateSheet, toggleNewMedPrn, saveNewMed, endMedication, openMedNoteSheet, saveMedNote, saveBp, saveWeight, loadMedChecklist, renderMedChecklistDOM, renderMedChecklistRow, loadMedProfiles, renderMedProfileCard, deleteMedication, fmtDate, loadVerlauf, openEditTimeSheet, saveEditedTime, openEditEntrySheet, stepEditEntryCount, saveEditEntry, deleteEditEntry, fmtTime, dayKeyVienna, dayLabelFor, groupByDayHtml, loadDashboard, loadOura, openHistoryModal, drawSparkline, init };
   return { init };
 }
 
