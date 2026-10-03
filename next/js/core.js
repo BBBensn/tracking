@@ -18,6 +18,30 @@ export function toIsoOrNull(datetimeLocalValue) {
   return datetimeLocalValue ? new Date(datetimeLocalValue).toISOString() : null;
 }
 
+export function fmtClock(iso) {
+  return new Date(iso).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
+}
+export function isoToDatetimeLocal(iso) {
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+// "Heute" / "Gestern" / "Mo 05.10." für einen dayKey (YYYY-MM-DD)
+export function dayLabel(key) {
+  const today = todayKey();
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  if (key === today) return "Heute";
+  if (key === dayKey(y)) return "Gestern";
+  const [yy, m, d] = key.split("-");
+  return `${["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][new Date(+yy, +m - 1, +d).getDay()]} ${d}.${m}.`;
+}
+
+/* ── HTML ── */
+// Namen/Notizen kommen vom Nutzer (und bei Importen aus Fremdquellen): immer escapen,
+// bevor sie in innerHTML-Templates landen.
+export function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 /* ── Fehlerbanner ── */
 const banner = () => document.getElementById("errBanner");
 let bannerTimer = null;

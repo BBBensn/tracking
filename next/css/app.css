@@ -103,3 +103,73 @@ body { overscroll-behavior: none; }
   border-bottom: 1px solid var(--border);
 }
 .subnav .tabs::-webkit-scrollbar { display: none; }
+
+/* ── Gemeinsame Komponenten für alle Module ──
+   Aus dem Health-Modul als kanonische Fassung übernommen (identische Regeln dort sind
+   harmlos und können bei Gelegenheit entfallen). Neue Module nutzen diese Klassen statt
+   eigener Kopien: Sheets (.overlay/.overlay-sheet), Formularfelder, Tags, Tages-Header. */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); z-index: 100;
+  display: none; align-items: flex-end; justify-content: center;
+}
+.overlay.visible { display: flex; }
+.overlay-sheet {
+  background: #161616; border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px 16px 0 0; padding: 1.5rem 1.25rem calc(2.5rem + var(--safe-b)); width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto;
+}
+.sheet-title { font-family: "Syne", sans-serif; font-size: 1.3rem; font-weight: 800; margin-bottom: 1.25rem; letter-spacing: -0.02em; }
+.sheet-label { font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
+.sheet-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.input-row {
+  display: flex; align-items: center; gap: 0.5rem; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; padding: 0.5rem 0.75rem; margin-bottom: 0.75rem;
+}
+.input-row input, .input-row select {
+  flex: 1; background: none; border: none; color: var(--text); font-family: "DM Mono", monospace;
+  font-size: 1.2rem; font-weight: 500; outline: none; min-width: 0;
+}
+.input-unit { font-family: "DM Mono", monospace; font-size: 13px; color: var(--muted); flex-shrink: 0; }
+.note-input {
+  width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px 12px; color: var(--text); font-family: "DM Mono", monospace; font-size: 12px;
+  outline: none; margin-bottom: 1rem; resize: vertical; min-height: 44px;
+}
+.tag-picker { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.9rem; }
+.tag-btn {
+  font-family: "DM Mono", monospace; font-size: 10.5px; padding: 5px 11px; border-radius: 6px;
+  border: 1px solid var(--border); color: var(--muted); background: none; cursor: pointer; transition: all 0.15s;
+}
+.tag-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.tag-btn.active { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(0, 166, 251, 0.08); }
+.btn-icon {
+  width: 30px; height: 30px; background: none; border: 1px solid var(--border); border-radius: 7px;
+  color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.15s, color 0.15s; flex-shrink: 0; padding: 0;
+}
+.btn-icon:hover { border-color: var(--border-hover); color: var(--text); }
+.btn-icon .material-symbols-outlined { font-size: 16px; }
+.day-header { display: flex; align-items: center; gap: 10px; margin: 1.25rem 0 0.6rem; padding: 0 2px; }
+.day-header:first-child { margin-top: 0; }
+.day-label { font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.day-count { font-family: "DM Mono", monospace; font-size: 9px; color: rgba(255, 255, 255, 0.2); white-space: nowrap; }
+.day-line { flex: 1; height: 1px; background: var(--border); }
+.empty-state { font-family: "DM Mono", monospace; font-size: 11px; color: var(--muted); padding: 2rem 0; text-align: center; }
+.section-label {
+  font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted); margin: 1.5rem 0 0.6rem;
+}
+.pill {
+  font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+  padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); flex-shrink: 0;
+}
+
+/* Tab-Buttons der Sub-Navigation (gemeinsam; Health/Work haben identische eigene Kopien) */
+.subnav .tab {
+  font-family: "DM Mono", monospace; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.1em; padding: 9px 14px; cursor: pointer; color: var(--muted);
+  border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  background: none; transition: color 0.15s, border-color 0.15s; white-space: nowrap; flex-shrink: 0;
+}
+.subnav .tab.active { color: var(--text); border-bottom-color: var(--text); }
+.subnav .tab:hover:not(.active) { color: var(--text); }

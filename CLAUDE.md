@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Habit-/Verbrauchstracker PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v1.8.0 (Gesamt-App-Vorschau unter /next/; Live-App unter / ist noch die alte)
+- **Version:** v1.9.0 (Gesamt-App-Vorschau unter /next/; Live-App unter / ist noch die alte)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -141,6 +141,18 @@ Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammeng
   Module bringen nur das Aussehen der einzelnen `.tab`-Buttons mit, nicht `.tabs`
 - Module mit Timern/Listenern/Overlays an `<body>` liefern `dispose()` und rufen es in
   `unmount()` auf (siehe `work.js`)
+- **Gemeinsame Komponenten** liegen in `app.css`: Sheets (`.overlay`/`.overlay-sheet`),
+  Formularfelder (`.input-row`, `.note-input`), Tags (`.tag-btn`), `.btn-icon`, `.day-header`,
+  `.pill`, `.empty-state`, `.section-label`, Sub-Nav-Tabs. Neue Module nutzen diese statt eigener
+  Kopien; `core.esc()` für alles, was Nutzertext enthält
+- **Food** (neu geschrieben, kein Konverter-Port): Delegation über `data-act`, Sheets werden
+  dynamisch in `#fdSheets` gerendert. Eingaben im offenen Sheet vor jedem Neu-Rendern in
+  `st.draft` sichern (`captureDraft`). Doppel-Tap-Schutz über `guard()`. Richtwerte (Zucker 50 g/
+  25 g WHO, Koffein 400 mg EFSA) stehen als `LIMITS` oben in `food.js` und werden in der App
+  mit Quelle angezeigt; ein kcal-Tagesziel gibt es bewusst noch nicht
+- **Red Bull** hat im Katalog `tracking_name`: es wird weiter im Tracking erfasst, die
+  Tagessummen zählen es über die health-api mit, und es erscheint deshalb weder als Kachel noch
+  in den Auswahllisten (sonst Doppelzählung). Beim Cutover migrieren, Mapping entfernen
 - Tab-Labels der Leiste bewusst kurz und englisch (Work, Health, Food, Habits, Sport)
 - API immer über `core.api()` / `core.apiHealth()` — nie rohes `fetch`. Die Wrapper
   erkennen abgelaufene Sessions (`redirect: "manual"` → opaqueredirect) und zeigen das
@@ -159,7 +171,7 @@ API_KEY=$(ssh bensn "grep -o '[a-f0-9]\{64\}' /etc/nginx/sites-enabled/tracking.
 Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder löschen.
 
 **Phasen:** ✅ 0 Backup-Cron · ✅ 1 Shell + Modul Health (Vorschau `/next/`) ·
-⬜ 2 Essen (neu: Katalog, Mahlzeit-Zeilen, Koffein/Zucker, Red-Bull-Migration) ·
+🟡 2 Food (Modul in der Vorschau; offen: Katalogwerte vom Nutzer prüfen lassen, Backfill der 30 Alt-Mahlzeiten, Red-Bull-Migration beim Cutover, kcal im Feed) ·
 ⬜ 3 Habits (= bisheriges tracking) · 🟡 4 Arbeit (Modul in der Vorschau, Schreib-Flows noch an einer echten Schicht zu prüfen) ·
 ⬜ 5 Cutover (`next/` → Root, alte Vhosts leiten um, neuer Service Worker, Feed-Anpassung) ·
 ⬜ 6 Sport · ⬜ Wisch-Gesten zwischen den Sub-Tabs eines Trackers (Randbereiche und horizontal scrollbare Elemente ausnehmen) · ⬜ Eingabe-Seite des Worktrackers als Sheet übernehmen (bis dahin Link auf worktracker.bensn.me/eingabe) · ⬜ Kurzbefehle/Quick-Log-API mit eigenen Tokens (danach)
@@ -178,6 +190,7 @@ Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder lösche
 | v1.6.3 | Bugfix: Service Worker konnte auf Safari/Mobilfunk komplett ausfallen ("FetchEvent.respondWith received an error: Returned response is null") — `fetch(...).catch(() => caches.match(...))` resolvte bei Netzwerkfehler + Cache-Miss zu `undefined`, was WebKit als fatalen Fehler wertet (Chromium verzeiht das). Cache-Fallback gibt jetzt immer ein echtes Response-Objekt zurück, notfalls eine 503-Antwort. Gleicher Fix in `health`/`feed` (identischer sw.js-Code in allen drei Apps) | ✅ deployed (2026-09-19) |
 | v1.7.0 | Gesamt-App-Vorschau unter `/next/`: Shell mit schwebender unterer Tab-Leiste, Fehlerbanner statt Status-Anzeige, Router, Modul Gesundheit (aus health.bensn.me übernommen, noch ohne Änderungen am Verhalten). Neue Nginx-Routen `/next/` und `/hapi/`; täglicher DB-Backup-Cron | ✅ deployed (2026-10-03) |
 | v1.8.0 | Gesamt-App-Vorschau: Modul **Work** (aus worktracker.bensn.me übernommen; Pausen-Overlay/Intervalle werden beim Verlassen aufgeräumt, `--orange` nur im Modul pink-rot), sticky Sub-Navigation mit Blur, kürzere Tab-Labels | ✅ deployed (2026-10-03) |
+| v1.9.0 | Gesamt-App-Vorschau: Modul **Food** (Katalog, Vorlagen, Mahlzeiten mit Nährwerten, Tagessummen mit Zucker-/Koffein-Richtwerten, Warenkorb-Eintragen, Bearbeiten, Katalog-/Vorlagen-Editor); gemeinsame Sheet-/Formular-Komponenten nach `app.css`; `core` um `esc`/`dayLabel`/`fmtClock` erweitert | ✅ deployed (2026-10-03) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 
