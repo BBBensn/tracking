@@ -5,6 +5,9 @@
 // Datenmodell in Kürze: Katalog (health_foods, Werte pro Portion) → Mahlzeit (health_meals)
 // besteht aus Zeilen (health_meal_items) mit Snapshot der Nährwerte. Vorlagen (Bundles) klappen
 // beim Antippen in einzeln anpassbare Zeilen auf (z.B. Salat = Basis + 4 Falafel + 2 Kornspitz).
+// Verlauf: gemeinsame Komponente js/history.js (Monate einklappbar, Liste/Kalender).
+
+import { createHistory } from "../history.js";
 
 // Richtwerte für gesunde Erwachsene — Quellen stehen in `note` und werden in der App angezeigt.
 const LIMITS = {
@@ -76,16 +79,22 @@ const CSS = `.m-food {
   .fd-row-name { font-family: "Syne", sans-serif; font-weight: 700; font-size: 0.9rem; overflow-wrap: anywhere; }
 
   /* Sheets */
-  .fd-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.6rem; }
-  .fd-grid2 .input-row input { font-size: 1rem; }
+  /* minmax(0, 1fr): sonst darf eine Spalte nicht unter die natürliche Breite des Eingabefelds schrumpfen
+     und das Sheet läuft seitlich über */
+  .fd-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 0.6rem; }
+  .fd-grid2 > div { min-width: 0; }
+  .fd-grid2 .input-row { min-width: 0; }
+  .fd-fl { font-family: "DM Mono", monospace; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.3rem 0.15rem; }
+  .fd-grid2 .input-row input { font-size: 1rem; width: 100%; min-width: 0; }
   .fd-eline { display: flex; align-items: center; gap: 0.5rem; padding: 6px 0; border-bottom: 1px solid var(--border); }
   .fd-eline-name { flex: 1; min-width: 0; font-family: "Syne", sans-serif; font-weight: 700; font-size: 0.88rem; overflow-wrap: anywhere; }
   .fd-step { display: flex; align-items: center; gap: 0.4rem; font-family: "DM Mono", monospace; font-size: 13px; }
   .fd-step button { width: 26px; height: 26px; padding: 0; }
   .fd-step span { min-width: 1.6em; text-align: center; }
   .fd-addrow { display: flex; gap: 0.5rem; align-items: center; margin: 0.6rem 0 1rem; }
-  .fd-addrow .input-row { flex: 1; margin-bottom: 0; }
-  .fd-addrow select { font-size: 0.95rem; }
+  .fd-addrow .input-row { flex: 1; min-width: 0; margin-bottom: 0; }
+  .fd-addrow select { font-size: 0.95rem; width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+  .fd-addrow .btn-pill { flex-shrink: 0; }
 }
 `;
 
@@ -175,7 +184,7 @@ function build(core, root) {
       : `<div class="fd-legacy">${esc(m.description || "")} · ohne Nährwerte</div>`;
     return `<div class="fd-card">
       <div class="fd-card-head"><span class="fd-time">${core.fmtClock(m.eaten_at)}</span>
-        ${m.label ? `<span class="pill">${esc(m.label)}</span>` : ""}
+        ${m.label ? `<span class="tag-pill">${esc(m.label)}</span>` : ""}
         <span class="fd-card-kcal">${items.length ? n0(total) + " kcal" : ""}</span>
         <button class="btn-icon" data-act="editMeal" data-id="${m.id}" aria-label="Bearbeiten"><span class="material-symbols-outlined">edit</span></button></div>
       ${lines}${m.note ? `<div class="fd-note">${esc(m.note)}</div>` : ""}</div>`;
@@ -221,19 +230,25 @@ function build(core, root) {
   }
 
   /* ── Render: Verlauf ── */
+  let hx = null, byDay = new Map();
   function renderVerlauf() {
-    const byDay = new Map();
+    byDay = new Map();
     st.meals.forEach((m) => { const k = core.dayKey(m.eaten_at); (byDay.get(k) || byDay.set(k, []).get(k)).push(m); });
     st.summary.forEach((d) => { if (!byDay.has(d.day)) byDay.set(d.day, []); });   // Tage nur mit Getränken aus dem Tracking
-    const days = [...byDay.keys()].sort((a, b) => b.localeCompare(a));
-    if (!days.length) { $("fd-verlauf").innerHTML = `<div class="empty-state">Noch keine Einträge.</div>`; return; }
-    $("fd-verlauf").innerHTML = days.map((k) => {
-      const s = st.summary.find((d) => d.day === k);
-      const tot = s ? `${n0(s.kcal)} kcal · ${n1(s.sugar_g)} g Zucker · ${n0(s.caffeine_mg)} mg Koffein` : "";
-      const meals = byDay.get(k);
-      return `<div class="day-header"><span class="day-label">${core.dayLabel(k)}</span><span class="day-count">${tot}</span><div class="day-line"></div></div>
-        ${meals.length ? meals.map(mealCard).join("") : `<div class="fd-hint" style="margin:0 0 .5rem">Nur Getränke aus dem Tracking.</div>`}`;
-    }).join("");
+    if (!hx) hx = createHistory($("fd-verlauf"), {
+      key: "food",
+      renderDay: (k) => {
+        const s = st.summary.find((d) => d.day === k);
+        const meals = byDay.get(k) || [];
+        return {
+          extra: s ? `<div class="fd-hint" style="margin:0">${n0(s.kcal)} kcal · ${n1(s.sugar_g)} g Zucker · ${n0(s.caffeine_mg)} mg Koffein</div>` : "",
+          body: meals.length ? meals.map(mealCard).join("") : `<div class="fd-hint" style="margin:0 0 .5rem">Nur Getränke aus dem Tracking.</div>`,
+        };
+      },
+    });
+    const days = new Map();
+    byDay.forEach((meals, k) => days.set(k, { count: meals.length, marks: meals.length ? ["var(--green)"] : ["var(--accent-blue)"] }));
+    hx.setData(days);
   }
 
   /* ── Render: Katalog ── */
@@ -243,7 +258,7 @@ function build(core, root) {
       ${right}<button class="btn-icon" data-act="${act}" data-id="${id}" aria-label="Bearbeiten"><span class="material-symbols-outlined">edit</span></button></div></div>`;
     const foodRow = (f) => row(f.name,
       `${esc(f.serving_label)} · ${n0(f.kcal)} kcal${f.sugar_g ? ` · ${n1(f.sugar_g)} g Z` : ""}${f.caffeine_mg ? ` · ${n0(f.caffeine_mg)} mg K` : ""}`,
-      f.source === "geschätzt" ? `<span class="pill" title="Geschätzter Wert">~</span>` : "", "editFood", f.id);
+      f.source === "geschätzt" ? `<span class="tag-pill" title="Geschätzter Wert">~</span>` : "", "editFood", f.id);
     const group = (kind) => st.foods.filter((f) => f.kind === kind).sort((a, b) => a.name.localeCompare(b.name, "de")).map(foodRow).join("") || `<div class="empty-state">Leer.</div>`;
     $("fd-katalog").innerHTML = `
       <div class="fd-toolbar"><button class="btn-pill green" data-act="newFood">+ Neu</button><button class="btn-pill" data-act="newBundle">+ Vorlage</button></div>
@@ -285,8 +300,12 @@ function build(core, root) {
       <div class="sheet-label">Label (optional)</div>${labelPicker(d.label)}
       <div class="sheet-label">Posten</div>${lines || `<div class="fd-sub" style="padding:.4rem 0">Noch nichts ausgewählt.</div>`}
       <div class="sheet-label" style="margin-top:.9rem">Eigener Posten (nicht im Katalog)</div>
-      <div class="fd-grid2"><div class="input-row"><input id="fxName" placeholder="Name"></div><div class="input-row"><input id="fxKcal" inputmode="decimal" placeholder="kcal"><span class="input-unit">kcal</span></div>
-        <div class="input-row"><input id="fxSugar" inputmode="decimal" placeholder="Zucker"><span class="input-unit">g</span></div><div class="input-row"><input id="fxCaf" inputmode="decimal" placeholder="Koffein"><span class="input-unit">mg</span></div></div>
+      <div class="input-row"><input id="fxName" placeholder="Name, z.B. Restaurant-Pizza"></div>
+      <div class="fd-grid2">
+        <div><div class="fd-fl">Kalorien</div><div class="input-row"><input id="fxKcal" inputmode="decimal" placeholder="0"><span class="input-unit">kcal</span></div></div>
+        <div><div class="fd-fl">Zucker</div><div class="input-row"><input id="fxSugar" inputmode="decimal" placeholder="0"><span class="input-unit">g</span></div></div>
+        <div><div class="fd-fl">Koffein</div><div class="input-row"><input id="fxCaf" inputmode="decimal" placeholder="0"><span class="input-unit">mg</span></div></div>
+      </div>
       <button class="btn-pill" data-act="cAddExtra" style="margin-bottom:1rem">+ Hinzufügen</button>
       <div class="sheet-label">Notiz (optional)</div><textarea class="note-input" id="fdNote" placeholder="z.B. Portion kleiner, Restaurant …">${esc(d.note)}</textarea>
       <div class="sheet-btns"><button class="btn-cancel" data-act="closeSheet">Abbrechen</button><button class="btn-save" data-act="cartLogSheet">Eintragen · ${n0(cartKcal())} kcal</button></div>`);
@@ -321,13 +340,13 @@ function build(core, root) {
     const f = id ? st.foods.find((x) => x.id === id) : null;
     st.draft = { type: "food", id: f ? f.id : null, kind: f ? f.kind : "food", source: f ? f.source : "geschätzt" };
     const v = (k) => (f && f[k] != null ? esc(String(f[k]).replace(".", ",")) : "");
-    const field = (key, ph, unit) => `<div class="input-row"><input id="ff_${key}" inputmode="decimal" placeholder="${ph}" value="${v(key)}"><span class="input-unit">${unit}</span></div>`;
+    const field = (key, label, unit) => `<div><div class="fd-fl">${label}</div><div class="input-row"><input id="ff_${key}" inputmode="decimal" placeholder="0" value="${v(key)}"><span class="input-unit">${unit}</span></div></div>`;
     openSheet(`<div class="sheet-title">${f ? "Eintrag bearbeiten" : "Neuer Katalogeintrag"}</div>
       <div class="input-row"><input id="ff_name" placeholder="Name" value="${f ? esc(f.name) : ""}"></div>
       <div class="tag-picker">${[["food", "Essen"], ["drink", "Getränk"]].map(([k, l]) => `<button class="tag-btn ${st.draft.kind === k ? "active" : ""}" data-act="pickKind" data-kind="${k}">${l}</button>`).join("")}</div>
       <div class="input-row"><input id="ff_serving" placeholder="Portion, z.B. 1 Stück (~100 g)" value="${f ? esc(f.serving_label) : ""}"></div>
       <div class="sheet-label">Nährwerte pro Portion</div>
-      <div class="fd-grid2">${field("kcal", "kcal", "kcal")}${field("protein_g", "Eiweiß", "g")}${field("carbs_g", "Kohlenhydrate", "g")}${field("fat_g", "Fett", "g")}${field("sugar_g", "Zucker", "g")}${field("caffeine_mg", "Koffein", "mg")}</div>
+      <div class="fd-grid2">${field("kcal", "Kalorien", "kcal")}${field("protein_g", "Eiweiß", "g")}${field("carbs_g", "Kohlenhydrate", "g")}${field("fat_g", "Fett", "g")}${field("sugar_g", "Zucker", "g")}${field("caffeine_mg", "Koffein", "mg")}</div>
       <div class="sheet-label">Quelle der Werte</div>
       <div class="tag-picker">${SOURCES.map(([k, l]) => `<button class="tag-btn ${st.draft.source === k ? "active" : ""}" data-act="pickSource" data-source="${k}">${l}</button>`).join("")}</div>
       <div class="sheet-btns">${f ? `<button class="btn-pill red" data-act="fDelete">Entfernen</button>` : ""}<button class="btn-cancel" data-act="closeSheet">Abbrechen</button><button class="btn-save" data-act="fSave">Speichern</button></div>`);

@@ -4,7 +4,11 @@
 //  - Beim Verlassen werden Intervall (alle 30s), Dokument-Listener und das an <body>
 //    gehängte Pausen-Overlay aufgeräumt (dispose).
 //  - --orange ist nur in diesem Modul Pink-Rot (#FF0051), global bleibt es Orange.
+//  - Verlauf (Tab Schichten): gemeinsame Komponente js/history.js.
 //  - Schichten werden weiter per iOS-Kurzbefehl gestartet/beendet (worktracker.bensn.me/api).
+
+import * as Eingabe from "./work-eingabe.js";
+import { createHistory } from "../history.js";
 
 const CSS = `.m-work {
 /* ── App Layout ── */
@@ -121,7 +125,7 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
     <button class="tab active" onclick="WT.switchTab('aktiv',this)">Aktiv</button>
     <button class="tab" onclick="WT.switchTab('schichten',this)">Schichten</button>
     <button class="tab" onclick="WT.switchTab('stats',this)">Stats</button>
-    <a class="tab" href="https://worktracker.bensn.me/eingabe" style="margin-left:auto;text-decoration:none;color:var(--accent-blue);border-bottom-color:transparent">+ Eingabe</a>
+    <button class="tab" onclick="WT.switchTab('eingabe',this)" style="margin-left:auto;color:var(--accent-blue)">+ Eingabe</button>
   </div></div>
 
   <div id="tab-aktiv" class="tab-section visible">
@@ -134,6 +138,9 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
 
   <div id="tab-stats" class="tab-section">
     <div id="statsContent"><div class="state-msg">Statistik wird geladen…</div></div>
+  </div>
+
+  <div id="tab-eingabe" class="tab-section"></div>
 `;
 
 function build(core, root) {
@@ -151,9 +158,18 @@ function build(core, root) {
     document.getElementById('tab-aktiv').classList.toggle('visible',t==='aktiv');
     document.getElementById('tab-schichten').classList.toggle('visible',t==='schichten');
     document.getElementById('tab-stats').classList.toggle('visible',t==='stats');
+    document.getElementById('tab-eingabe').classList.toggle('visible',t==='eingabe');
+    // Eingabe wird bei jedem Öffnen frisch aufgebaut (Status der aktuellen Schicht, leere Formulare)
+    eingabe?.dispose(); eingabe = null;
+    if(t==='eingabe') {
+      eingabe = Eingabe.create(core, document.getElementById('tab-eingabe'), {
+        onDone: () => { switchTab('aktiv', document.querySelector('.m-work .tab')); loadActive(); },
+      });
+    }
     if(t==='schichten') loadShifts();
     if(t==='stats' && !statsLoaded) loadStats();
   }
+  let eingabe = null;
 
   /* ── Helpers ── */
   function fmtTime(iso){
@@ -279,106 +295,65 @@ function build(core, root) {
     });
   }
 
-  /* ── Render Shifts ── */
+  /* ── Render Shifts ── (Monate/Tage/Kalender: gemeinsame Komponente js/history.js) */
+  const SHIFT_BORDER = {'früh':'rgba(250,204,21,0.35)', 'nachmittag':'rgba(232,114,74,0.35)', 'nacht':'rgba(0,166,237,0.35)'};
+  const SHIFT_MARK = {'früh':'rgb(250,204,21)', 'nachmittag':'rgb(232,114,74)', 'nacht':'var(--accent-blue)'};
+  let hx = null;
+  let shiftsByDay = new Map();
+
+  function shiftRowEl(s){
+    const isActive=!s.work_end;
+    const grossMin=s.work_end?Math.round((new Date(s.work_end)-new Date(s.work_start))/60000):null;
+    const nettoMin=grossMin!==null?grossMin-(s.total_break_minutes||0):null;
+    const cigTotal=s.zig_total||0;
+    const stationLabel=s.station+(s.duo_partner_station?` · ${s.duo_partner_station}`:'');
+    const typClass = {'früh':'typ-frueh','nachmittag':'typ-nachmittag','nacht':'typ-nacht'}[s.shift_type] || '';
+
+    const el=document.createElement('div');
+    el.className='wt-shift-row ' + typClass;
+    el.dataset.shiftId = s.id;
+    el.style.cssText=`border-color:${SHIFT_BORDER[s.shift_type] || 'var(--border)'};background:var(--surface);cursor:pointer`;
+
+    el.innerHTML=`
+      <div class="wt-shift-dot ${isActive?'active':''}"></div>
+      <div style="min-width:0">
+        <div class="wt-shift-sender">${stationLabel}</div>
+        <div class="wt-shift-meta">${fmtDate(s.work_start)} · ${schichtTyp(s.shift_type)} · ${fmtTime(s.work_start)} → ${fmtTime(s.work_end)}</div>
+        ${cigTotal>0?`<span class="tag">${cigTotal} Zig.</span>`:''}
+        ${(s.total_break_minutes||0)>0?`<span class="tag">${s.total_break_minutes} min Pause</span>`:''}
+        ${s.notes?`<span class="tag" style="color:var(--accent-blue)">Notiz</span>`:''}
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="wt-shift-netto">Netto ${nettoMin!==null?fmtDuration(nettoMin):'—'}</div>
+        <div class="wt-shift-meta">Brutto ${grossMin!==null?fmtDuration(grossMin):'—'}</div>
+        <div class="wt-shift-status" style="color:${isActive?'var(--green)':'var(--muted)'}">${isActive?'aktiv':'abgeschlossen'}</div>
+        <div class="expand-arrow" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:4px">▼</div>
+      </div>
+      <div class="shift-detail" style="display:none;grid-column:1/-1;border-top:1px solid var(--border);padding-top:1rem;margin-top:.5rem">
+        <div id="detail-${s.id}"><div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);text-align:center;padding:.5rem">Laden…</div></div>
+      </div>`;
+    el.addEventListener('click', (e)=>{
+      if(e.target.closest('.shift-detail')) return;
+      toggleShiftDetail(el, s.id);
+    });
+    return el;
+  }
+
   function renderShifts(shifts){
     const list=document.getElementById('shiftsList');
-    if(!shifts||shifts.length===0){list.innerHTML='<div class="state-msg">Noch keine Schichten vorhanden.</div>';return;}
-    list.innerHTML='';
-
-    // Shift type colors: früh=yellow, nachmittag=orange, nacht=blue
-    const shiftColors = {
-      'früh':       'rgba(250,204,21,0.08)',
-      'nachmittag': 'rgba(232,114,74,0.08)',
-      'nacht':      'rgba(0,166,237,0.08)'
-    };
-    const shiftBorders = {
-      'früh':       'rgba(250,204,21,0.35)',
-      'nachmittag': 'rgba(232,114,74,0.35)',
-      'nacht':      'rgba(0,166,237,0.35)'
-    };
-
-    const MONTHS_DE = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-    let lastMonthKey = null;
-    let animIdx = 0;
-    let currentBody = null;
-    const now = new Date();
-    const nowKey = `${now.getFullYear()}-${now.getMonth()}`;
-
-    shifts.forEach((s,i)=>{
-      // ── Month header (collapsible) ──
-      const d = new Date(s.work_start);
-      const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
-      if(monthKey !== lastMonthKey){
-        lastMonthKey = monthKey;
-        const isOpen = monthKey === nowKey;
-
-        const group = document.createElement('div');
-        group.className = 'month-group';
-
-        const hdr = document.createElement('div');
-        hdr.className = 'month-header';
-        hdr.style.cssText="display:flex;align-items:center;gap:.5rem;cursor:pointer;-webkit-tap-highlight-color:transparent;font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;letter-spacing:-0.02em;color:var(--text);margin:1.75rem 0 .75rem;opacity:0;transition:opacity .4s ease;user-select:none";
-        hdr.innerHTML = `<span class="month-arrow" style="font-size:.8rem;color:var(--muted);display:inline-block;transition:transform .2s;transform:rotate(${isOpen?0:-90}deg)">▼</span><span>${MONTHS_DE[d.getMonth()]} ${d.getFullYear()}</span>`;
-
-        const body = document.createElement('div');
-        body.className = 'month-body';
-        body.style.display = isOpen ? 'block' : 'none';
-
-        hdr.addEventListener('click', ()=>{
-          const open = body.style.display !== 'none';
-          body.style.display = open ? 'none' : 'block';
-          hdr.querySelector('.month-arrow').style.transform = `rotate(${open?-90:0}deg)`;
-        });
-
-        group.appendChild(hdr);
-        group.appendChild(body);
-        list.appendChild(group);
-        setTimeout(()=>hdr.style.opacity='1', 80 + animIdx*80);
-        animIdx++;
-        currentBody = body;
-      }
-
-      const isActive=!s.work_end;
-      const grossMin=s.work_end?Math.round((new Date(s.work_end)-new Date(s.work_start))/60000):null;
-      const nettoMin=grossMin!==null?grossMin-(s.total_break_minutes||0):null;
-      const cigTotal=s.zig_total||0;
-      const stationLabel=s.station+(s.duo_partner_station?` · ${s.duo_partner_station}`:'');
-      const borderColor = shiftBorders[s.shift_type] || 'var(--border)';
-      const typClass = {'früh':'typ-frueh','nachmittag':'typ-nachmittag','nacht':'typ-nacht'}[s.shift_type] || '';
-
-      const el=document.createElement('div');
-      el.className='wt-shift-row ' + typClass;
-      el.dataset.shiftId = s.id;
-      el.style.cssText=`opacity:0;transform:translateY(12px);transition:opacity .5s ease,transform .5s ease;border-color:${borderColor};background:var(--surface)`;
-
-      el.innerHTML=`
-        <div class="wt-shift-dot ${isActive?'active':''}"></div>
-        <div style="min-width:0">
-          <div class="wt-shift-sender">${stationLabel}</div>
-          <div class="wt-shift-meta">${fmtDate(s.work_start)} · ${schichtTyp(s.shift_type)} · ${fmtTime(s.work_start)} → ${fmtTime(s.work_end)}</div>
-          ${cigTotal>0?`<span class="tag">${cigTotal} Zig.</span>`:''}
-          ${(s.total_break_minutes||0)>0?`<span class="tag">${s.total_break_minutes} min Pause</span>`:''}
-          ${s.notes?`<span class="tag" style="color:var(--accent-blue)">Notiz</span>`:''}
-        </div>
-        <div style="text-align:right;flex-shrink:0">
-          <div class="wt-shift-netto">Netto ${nettoMin!==null?fmtDuration(nettoMin):'—'}</div>
-          <div class="wt-shift-meta">Brutto ${grossMin!==null?fmtDuration(grossMin):'—'}</div>
-          <div class="wt-shift-status" style="color:${isActive?'var(--green)':'var(--muted)'}">${isActive?'aktiv':'abgeschlossen'}</div>
-          <div class="expand-arrow" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:4px">▼</div>
-        </div>
-        <div class="shift-detail" style="display:none;grid-column:1/-1;border-top:1px solid var(--border);padding-top:1rem;margin-top:.5rem">
-          <div id="detail-${s.id}"><div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);text-align:center;padding:.5rem">Laden…</div></div>
-        </div>`;
-
-      el.style.cursor='pointer';
-      el.addEventListener('click', (e)=>{
-        if(e.target.closest('.shift-detail')) return;
-        toggleShiftDetail(el, s.id);
-      });
-      currentBody.appendChild(el);
-      setTimeout(()=>{el.style.opacity='1';el.style.transform='none';},100+animIdx*80);
-      animIdx++;
+    if(!hx) hx = createHistory(list, {
+      key: 'work',
+      emptyHtml: '<div class="state-msg">Noch keine Schichten vorhanden.</div>',
+      renderDay: (day) => ({ body: (shiftsByDay.get(day)||[]).map(shiftRowEl) }),
     });
+    shiftsByDay = new Map();
+    (shifts||[]).forEach(s=>{
+      const k = core.dayKey(s.work_start);
+      (shiftsByDay.get(k) || shiftsByDay.set(k, []).get(k)).push(s);
+    });
+    const days = new Map();
+    shiftsByDay.forEach((arr, k)=> days.set(k, { count: arr.length, marks: arr.map(s=>SHIFT_MARK[s.shift_type] || 'var(--muted)') }));
+    hx.setData(days);
   }
 
   async function toggleShiftDetail(el, shiftId){
@@ -1029,13 +1004,14 @@ function build(core, root) {
   let shiftsLoaded=false;
   async function loadShifts(){
     const list=document.getElementById('shiftsList');
-    list.innerHTML='<div class="state-msg">Schichten werden geladen…</div>';
+    const say=(html)=> hx ? hx.setMessage(html) : (list.innerHTML=html);
+    if(!shiftsLoaded) say('<div class="state-msg">Schichten werden geladen…</div>');
     try{
       const data=await apiFetch('/api/shifts?limit=500');
       renderShifts(data.shifts||data);
       shiftsLoaded=true;
     }catch(e){
-      list.innerHTML=`<div class="state-msg">Fehler: ${e.message}<br><button onclick="WT.loadShifts()" style="margin-top:.75rem;font-family:'DM Mono',monospace;font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:6px;cursor:pointer">Neu laden</button></div>`;
+      say(`<div class="state-msg">Fehler: ${e.message}<br><button onclick="WT.loadShifts()" style="margin-top:.75rem;font-family:'DM Mono',monospace;font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);padding:6px 14px;border-radius:6px;cursor:pointer">Neu laden</button></div>`);
     }
   }
 
@@ -1186,6 +1162,7 @@ function build(core, root) {
   function dispose() {
     document.removeEventListener('click', onDocClick);
     timers.forEach(clearInterval);
+    eingabe?.dispose(); eingabe = null;
     document.getElementById('break-edit-overlay')?.remove();
   }
 

@@ -116,7 +116,7 @@ body { overscroll-behavior: none; }
 .overlay-sheet {
   background: #161616; border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px 16px 0 0; padding: 1.5rem 1.25rem calc(2.5rem + var(--safe-b)); width: 100%; max-width: 480px;
-  max-height: 90vh; overflow-y: auto;
+  max-height: 90vh; overflow-y: auto; overflow-x: hidden;   /* nie seitlich scrollen — Überläufer werden stattdessen im jeweiligen Modul behoben */
 }
 .sheet-title { font-family: "Syne", sans-serif; font-size: 1.3rem; font-weight: 800; margin-bottom: 1.25rem; letter-spacing: -0.02em; }
 .sheet-label { font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.4rem; }
@@ -159,7 +159,8 @@ body { overscroll-behavior: none; }
   font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--muted); margin: 1.5rem 0 0.6rem;
 }
-.pill {
+/* .tag-pill (nicht .pill): Module wie Work/Eingabe definieren eigene .pill-Klassen */
+.tag-pill {
   font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
   padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); flex-shrink: 0;
 }
@@ -173,3 +174,47 @@ body { overscroll-behavior: none; }
 }
 .subnav .tab.active { color: var(--text); border-bottom-color: var(--text); }
 .subnav .tab:hover:not(.active) { color: var(--text); }
+
+/* ── Gemeinsamer Verlauf (js/history.js): Umschalter Liste/Kalender, einklappbare Monate, Kalenderraster ── */
+.hx-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.9rem; }
+.hx-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.hx-seg button {
+  display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: none; background: none;
+  color: var(--muted); cursor: pointer; font-family: "DM Mono", monospace; font-size: 10.5px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.hx-seg button + button { border-left: 1px solid var(--border); }
+.hx-seg button .material-symbols-outlined { font-size: 16px; }
+.hx-seg button.active { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+
+.hx-month { margin-bottom: 0.4rem; }
+.hx-month-head {
+  width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 2px; background: none; border: none;
+  border-bottom: 1px solid var(--border); color: var(--text); cursor: pointer; text-align: left;
+  font-family: "Syne", sans-serif; font-weight: 700; font-size: 0.95rem;
+}
+.hx-arrow { font-size: 9px; color: var(--muted); transition: transform 0.15s; display: inline-block; }
+.hx-month.collapsed .hx-arrow { transform: rotate(-90deg); }
+.hx-month-count { margin-left: auto; font-family: "DM Mono", monospace; font-size: 10px; font-weight: 400; color: var(--muted); }
+.hx-month.collapsed .hx-month-body { display: none; }
+.hx-month-body { padding-top: 0.75rem; }
+.hx-day-extra { margin: 0 2px 0.5rem; }
+
+.hx-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+.hx-cal-nav .btn-icon:disabled { opacity: 0.3; cursor: default; }
+.hx-cal-title { font-family: "Syne", sans-serif; font-weight: 700; font-size: 1rem; }
+.hx-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.hx-wd { text-align: center; font-family: "DM Mono", monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding-bottom: 4px; }
+.hx-cell {
+  aspect-ratio: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border: 1px solid transparent; border-radius: 9px; background: none; color: rgba(255, 255, 255, 0.28);
+  font-family: "DM Mono", monospace; font-size: 12px; padding: 0; cursor: default;
+}
+.hx-cell.blank { visibility: hidden; }
+.hx-cell.has { color: var(--text); background: var(--surface); border-color: var(--border); cursor: pointer; }
+.hx-cell.today { border-color: rgba(255, 255, 255, 0.35); }
+.hx-cell.sel { border-color: var(--accent-blue); background: rgba(0, 166, 251, 0.12); }
+.hx-dots { display: flex; gap: 3px; height: 5px; }
+.hx-dots i { width: 5px; height: 5px; border-radius: 50%; display: block; }
+.hx-todaybar { display: flex; justify-content: center; margin: 0.8rem 0 0.2rem; }
+.hx-daydetail { margin-top: 0.4rem; }

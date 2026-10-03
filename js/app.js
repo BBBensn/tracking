@@ -78,3 +78,6 @@ function routeFromHash() {
 renderTabbar();
 window.addEventListener("hashchange", () => navigate(routeFromHash()));
 navigate(routeFromHash());
+
+// Service Worker: nur für Installierbarkeit (kein Offline-Cache der App — Module kommen immer frisch).
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});

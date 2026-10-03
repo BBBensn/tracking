@@ -1,8 +1,9 @@
 {
   "name": "bensn tracking",
   "short_name": "tracking",
-  "description": "Habit- und Verbrauchstracker",
+  "description": "Arbeit, Gesundheit, Essen, Habits und Sport an einem Ort",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0a0b",
   "theme_color": "#0a0a0b",

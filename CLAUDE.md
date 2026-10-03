@@ -7,9 +7,9 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 ## Projekt-Basics
 
-- **Name:** tracking (Habit-/Verbrauchstracker PWA)
+- **Name:** tracking (Gesamt-App: Work, Health, Food, Habits — PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v1.11.0 (Gesamt-App-Vorschau unter /next/; Live-App unter / ist noch die alte)
+- **Version:** v2.0.0 (Gesamt-App live im Root; alte Habit-Seite als Rückfall unter /legacy/)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -28,9 +28,12 @@ Item-spezifische Logik im Code — alles läuft über `tracking_categories`/`tra
 
 ```
 ~/Documents/Coding/bensn-hub/tracking/
-├── index.html          ← aktuelle PWA (Tabs: Heute / Verlauf / Einstellungen)
-├── manifest.json
-├── sw.js
+├── index.html          ← Shell der Gesamt-App
+├── css/app.css         ← Shell-Styles + gemeinsame Komponenten (Sheets, Verlauf …)
+├── js/                 ← app.js (Router) · core.js · history.js (Verlauf) · modules/<id>.js
+├── manifest.json · sw.js
+├── legacy/index.html   ← alte Habit-Tracker-Einzelseite (nur Rückfall)
+├── tools/              ← devserver.py, testmode.sh
 ├── schema.sql           ← Referenz-Schema der 3 Tracking-Tabellen (kein Migrationsrunner)
 ├── docs/changelogs/      ← Changelogs
 └── CLAUDE.md
@@ -41,11 +44,12 @@ Item-spezifische Logik im Code — alles läuft über `tracking_categories`/`tra
 ## Remote-Struktur
 
 ```
-/var/www/tracking/         ← tracking.bensn.me Frontend (index.html, manifest.json, sw.js)
+/var/www/tracking/         ← tracking.bensn.me Frontend (index.html, css/, js/, legacy/, manifest.json, sw.js)
 ```
 
-Backend läuft als Teil der hub-api (`bensn-api`, Port 5001) — siehe `bensn-meta`-Repo für
-API-Code, Deploy und Docker-Compose.
+Nginx: `bensn-meta/nginx/tracking.bensn.me` (js/css mit no-cache hinter Cookie-Auth, `/next/` → `/`).
+`worktracker.bensn.me` und `health.bensn.me` leiten `/` auf die App um und behalten nur `/api/`.
+Backend läuft als Teil der hub-api (`bensn-api`, Port 5001) und health-api (:5008).
 
 ---
 
@@ -59,12 +63,14 @@ Tabellen liegen in der geteilten `bensnos`-DB (Postgres), verwaltet über die hu
 ## Deploy
 
 ```bash
-scp ~/Documents/Coding/bensn-hub/tracking/index.html bensn:/var/www/tracking/index.html
-scp ~/Documents/Coding/bensn-hub/tracking/manifest.json bensn:/var/www/tracking/manifest.json
-scp ~/Documents/Coding/bensn-hub/tracking/sw.js bensn:/var/www/tracking/sw.js
+cd ~/Documents/Coding/bensn-hub/tracking
+scp index.html manifest.json sw.js bensn:/var/www/tracking/
+scp -r css js bensn:/var/www/tracking/
 ```
 
 Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und deployed.
+
+---
 
 ---
 
@@ -111,7 +117,7 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
 
 ---
 
-## Gesamt-App-Umbau (läuft seit 2026-10-03)
+## Gesamt-App (Umbau 2026-10-03, live seit 2026-10-04)
 
 **Entscheidung:** `tracking.bensn.me` wird die eine App für Arbeit, Gesundheit, Essen, Habits
 und Sport (untere Tab-Leiste, oben je Tracker die bisherigen Sub-Tabs). **Außen vor bleiben**
@@ -123,12 +129,13 @@ Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammeng
   `/root/backups/`, 14 Tage; manuelle Kopie in `~/Documents/Coding/bensn-backups/`)
 - Nur additive Schema-Änderungen (neue Tabellen/Spalten), nichts löschen oder umbenennen,
   solange die Alt-Apps noch laufen. Migrationen als Kopie, nicht als Verschiebung
-- Alt-Apps (health./worktracker./tracking. unter `/`) bleiben bis zum Cutover unverändert
-  live — die Gesamt-App liest/schreibt dieselbe DB, ein Rückfall ist jederzeit möglich
+- Rückfall nach dem Cutover (2026-10-04): alte Seiten sind im Repo (`legacy/`, `worktracker/`,
+  `health/`), Nginx-Originale liegen auf dem Server unter `/root/nginx-backup-20261004/`; die
+  Gesamt-App liest/schreibt dieselbe DB wie früher
 - `worktracker.bensn.me` bleibt auch nach dem Cutover erreichbar (iOS-Kurzbefehle +
   OwnTracks hängen an `/api/` dort), ebenso `health.bensn.me/api/oura/callback`
 
-**Architektur** (`next/`, später `/`): `index.html` (Shell) · `css/app.css` ·
+**Architektur** (Root von `tracking/`): `index.html` (Shell) · `css/app.css` ·
 `js/core.js` (api, Zeit, Fehlerbanner) · `js/app.js` (Router) · `js/modules/<id>.js`.
 - Immer **genau ein Modul gemountet** (`mount(root, core)` / `unmount()`), Wechsel lädt
   frisch. Grund: die Alt-Apps teilen Element-IDs (`tab-verlauf`, …) und globale Namen
@@ -143,8 +150,9 @@ Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammeng
   `unmount()` auf (siehe `work.js`)
 - **Gemeinsame Komponenten** liegen in `app.css`: Sheets (`.overlay`/`.overlay-sheet`),
   Formularfelder (`.input-row`, `.note-input`), Tags (`.tag-btn`), `.btn-icon`, `.day-header`,
-  `.pill`, `.empty-state`, `.section-label`, Sub-Nav-Tabs. Neue Module nutzen diese statt eigener
+  `.tag-pill`, `.empty-state`, `.section-label`, Sub-Nav-Tabs. Neue Module nutzen diese statt eigener
   Kopien; `core.esc()` für alles, was Nutzertext enthält
+- **Verlauf** (`js/history.js`) ist für ALLE Tracker gleich: ein Modul liefert nur `setData(Map tag → {count, marks})` und `renderDay(tag) → {extra?, body: String|Node|Node[]}`; Monatsköpfe, Tagesköpfe, Liste/Kalender-Umschalter und das Merken der Ansicht (`localStorage bensn.hx.<key>`) macht die Komponente. Klicks innerhalb der Tagesinhalte bleiben im Modul. `renderDay` darf keine beim Erzeugen eingefrorene Datenstruktur nutzen (immer Variablen im Modul-Scope lesen, die bei jedem Laden neu gesetzt werden)
 - **Food** (neu geschrieben, kein Konverter-Port): Delegation über `data-act`, Sheets werden
   dynamisch in `#fdSheets` gerendert. Eingaben im offenen Sheet vor jedem Neu-Rendern in
   `st.draft` sichern (`captureDraft`). Doppel-Tap-Schutz über `guard()`. Richtwerte (Zucker 50 g/
@@ -180,16 +188,14 @@ Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammeng
 ```bash
 ssh -f -N -L 8125:127.0.0.1:5001 bensn; ssh -f -N -L 8123:127.0.0.1:5008 bensn
 API_KEY=$(ssh bensn "grep -o '[a-f0-9]\{64\}' /etc/nginx/sites-enabled/tracking.bensn.me | head -1") \
-  python3 tracking/tools/devserver.py 9300      # → http://127.0.0.1:9300/next/
+  python3 tracking/tools/devserver.py 9300      # → http://127.0.0.1:9300/
 ```
-Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder löschen.
+Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder löschen. Schreibpfade
+gefahrlos testen: `ssh bensn 'bash -s up' < tracking/tools/testmode.sh` legt eine DB-Kopie + Test-APIs an
+(Ports 5011/5018; Tunnel 8126/8128, Dev-Server mit `API_UPSTREAM=8126 HAPI_UPSTREAM=8128`), `… down` räumt auf.
 
-**Phasen:** ✅ 0 Backup-Cron · ✅ 1 Shell + Modul Health (Vorschau `/next/`) ·
-🟡 2 Food (Modul in der Vorschau, Getränke migriert, kcal im Feed ✅; offen: Katalogwerte vom Nutzer prüfen lassen, Backfill der Alt-Mahlzeiten, Zutaten-basierte Gerichte mit Gramm-Angaben + Basis-Gemüse/Obst-Katalog + Scan von Packungswerten) ·
-🟡 3 Habits (Modul in der Vorschau, Schreib-Pfade geprüft, schnell geladen, Arbeits-Zigaretten chronologisch) ·
-⬜ 3b Einheitlicher Verlauf für alle Tracker (einklappbare Monate wie im Worktracker + Kalenderansicht, siehe Vorschlag) · 🟡 4 Arbeit (Modul in der Vorschau, Schreib-Flows noch an einer echten Schicht zu prüfen) ·
-⬜ 5 Cutover (`next/` → Root, alte Vhosts leiten um, neuer Service Worker, Feed-Anpassung) ·
-⬜ 6 Sport · ⬜ Wisch-Gesten zwischen den Sub-Tabs eines Trackers (Randbereiche und horizontal scrollbare Elemente ausnehmen) · ⬜ Eingabe-Seite des Worktrackers als Sheet übernehmen (bis dahin Link auf worktracker.bensn.me/eingabe) · ⬜ Kurzbefehle/Quick-Log-API mit eigenen Tokens (danach)
+**Phasen:** ✅ 0 Backup-Cron · ✅ 1 Shell + Health · ✅ 2 Food (offen: Katalogwerte vom Nutzer prüfen lassen, Backfill der Alt-Mahlzeiten, Zutaten-basierte Gerichte mit Gramm-Angaben + Basis-Gemüse/Obst-Katalog + Scan von Packungswerten) · ✅ 3 Habits · ✅ 3b Einheitlicher Verlauf · ✅ 4 Work (inkl. Tab Eingabe; Schreib-Flows gegen DB-Kopie geprüft, am echten Dienst noch vom Nutzer zu testen) · ✅ 5 Cutover (2026-10-04) ·
+⬜ 6 Sport · ⬜ Wisch-Gesten zwischen den Sub-Tabs eines Trackers (Randbereiche und horizontal scrollbare Elemente ausnehmen) · ⬜ Kurzbefehle/Quick-Log-API mit eigenen Tokens · ⬜ Alt-Seiten `worktracker/`, `health/` und `legacy/` nach einer Bewährungszeit aus den Repos/vom Server entfernen
 
 ## Roadmap
 
@@ -208,6 +214,7 @@ Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder lösche
 | v1.9.0 | Gesamt-App-Vorschau: Modul **Food** (Katalog, Vorlagen, Mahlzeiten mit Nährwerten, Tagessummen mit Zucker-/Koffein-Richtwerten, Warenkorb-Eintragen, Bearbeiten, Katalog-/Vorlagen-Editor); gemeinsame Sheet-/Formular-Komponenten nach `app.css`; `core` um `esc`/`dayLabel`/`fmtClock` erweitert | ✅ deployed (2026-10-03) |
 | v1.10.0 | Gesamt-App-Vorschau: Modul **Habits** (aus tracking.bensn.me übernommen: Zähler, Vorrat, Verlauf, Einstellungen, Arbeits-Verknüpfung); Red Bull/Holy/Kaffee nach Food migriert; Sub-Nav-Abstand oben wieder 1,25 rem (war beim Umbau auf sticky versehentlich auf 0,5 rem geschrumpft) | ✅ deployed (2026-10-03) |
 | v1.11.0 | Gesamt-App-Vorschau: Mahlzeiten aus dem Health-Modul entfernt (Heute-Button, Verlauf, Dashboard-Kachel, Bearbeiten) — Food/Getränke nur noch in Food; Habits lädt mit 3 statt 104 Requests (`/api/smoke-breaks`, ~0,3 s); Arbeits-Zigaretten stehen je Pause chronologisch im Habits-Verlauf; Habits-Bearbeiten-Sheet war ungestylt (Overlay hing an `<body>` außerhalb des Modul-CSS), Work-Overlays ebenfalls in den Modul-Container verlegt | ✅ deployed (2026-10-04) |
+| v2.0.0 | **Cutover:** Gesamt-App im Root von tracking.bensn.me (Work, Health, Food, Habits), alte Vhosts worktracker./health. leiten um (APIs bleiben), neuer Service Worker, einheitlicher Verlauf mit Kalenderansicht in allen Trackern, Work-Tab Eingabe, Medikamente in Tropfen, Food-Sheet-Layout | ✅ deployed (2026-10-04) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 

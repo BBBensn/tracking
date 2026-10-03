@@ -8,10 +8,17 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))  # bensn-hub/
 API_KEY = os.environ["API_KEY"]
+# Standard: Tunnel auf die ECHTEN APIs (8125 -> bensn-api, 8123 -> health-api). Für gefahrloses
+# Testen von Schreibpfaden gegen die DB-Kopie: tools/testmode.sh und API_UPSTREAM=8126 HAPI_UPSTREAM=8128.
+API_UP = os.environ.get("API_UPSTREAM", "8125")
+HAPI_UP = os.environ.get("HAPI_UPSTREAM", "8123")
 STATIC = [
-    ("/next/", f"{REPO}/tracking/next/"),
+    ("/js/", f"{REPO}/tracking/js/"),
+    ("/css/", f"{REPO}/tracking/css/"),
     ("/shared/", f"{REPO}/bensn-meta/shared/"),
     ("/icons/", f"{REPO}/tracking/icons/"),
+    ("/legacy/", f"{REPO}/tracking/legacy/"),
+    ("/", f"{REPO}/tracking/"),        # index.html, manifest.json, sw.js (muss zuletzt stehen)
 ]
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9300
 
@@ -39,9 +46,9 @@ class H(BaseHTTPRequestHandler):
     def do_ANY(self):
         p = self.path
         if p.startswith("/hapi/"):
-            return self._proxy("http://127.0.0.1:8123", "/api/" + p[len("/hapi/"):])
+            return self._proxy(f"http://127.0.0.1:{HAPI_UP}", "/api/" + p[len("/hapi/"):])
         if p.startswith("/api/"):
-            return self._proxy("http://127.0.0.1:8125", p)
+            return self._proxy(f"http://127.0.0.1:{API_UP}", p)
         if self.command == "GET":
             path = p.split("?")[0]
             for prefix, root in STATIC:

@@ -1,14 +1,56 @@
-// habits.js — Modul "Habits" (Konsum-/Gewohnheits-Zähler, Vorrat, Verlauf, Einstellungen).
-// Aus tracking.bensn.me übernommen. Besonderheiten gegenüber der Einzel-App:
-//  - Handler in Inline-onclick laufen über window.HB (nur solange gemountet).
-//  - API über core.api (Cookie-Auth) — der frühere Client-seitige API-Key entfällt.
-//  - Beim Verlassen: Tastatur-Listener, Toast-Timer und das an <body> gehängte Sheet werden
-//    aufgeräumt (dispose). Kopfzeile/Status/Footer/SW-Registrierung entfallen (macht die Shell).
-//  - Red Bull, Holy und Kaffee sind seit 2026-10-03 nach Food migriert (tracking_items inaktiv).
-//  - Arbeits-Zigaretten kommen mit EINER Abfrage (/api/smoke-breaks) und stehen je Pause chronologisch im Verlauf.
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Tracking · bensn.me</title>
+        <meta
+            name="description"
+            content="Habit Tracking — Konsum, Verbrauch, Gewohnheiten."
+        />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+            name="apple-mobile-web-app-status-bar-style"
+            content="black-translucent"
+        />
+        <meta name="apple-mobile-web-app-title" content="Tracking" />
+        <meta name="theme-color" content="#0a0a0b" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="192x192"
+            href="/icons/icon-192.png"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="/shared/bensn.css" />
+        <style>
+            body {
+                overscroll-behavior: none;
+            }
 
-const CSS = `.m-habits {
+            .app-wrap {
+                position: relative;
+                z-index: 1;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 0 1.25rem 4rem;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+            }
+
             /* ── Tabs ── */
+            .tabs {
+                display: flex;
+                border-bottom: 1px solid var(--border);
+                margin-bottom: 1.25rem;
+            }
             .tab {
                 font-family: "DM Mono", monospace;
                 font-size: 11px;
@@ -40,6 +82,42 @@ const CSS = `.m-habits {
             }
 
             /* ── API Status Bar ── */
+            .api-bar {
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.6rem 1rem;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                margin-bottom: 1rem;
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                color: var(--muted);
+            }
+            .api-bar .dot-sm {
+                width: 5px;
+                height: 5px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                background: var(--muted);
+            }
+            .api-bar .dot-sm.ok {
+                background: var(--green);
+                animation: pulse 2s ease-in-out infinite;
+            }
+            .api-bar .dot-sm.err {
+                background: var(--accent-red);
+            }
+            .api-bar-right {
+                margin-left: auto;
+                color: rgba(255, 255, 255, 0.2);
+                cursor: pointer;
+                transition: color 0.15s;
+            }
+            .api-bar-right:hover {
+                color: var(--muted);
+            }
 
             /* ── Category Group ── */
             .cat-group {
@@ -475,7 +553,7 @@ const CSS = `.m-habits {
             /* ── Toast ── */
             .toast {
                 position: fixed;
-                bottom: calc(var(--nav-clear) + 1rem);
+                bottom: 2rem;
                 left: 50%;
                 transform: translateX(-50%) translateY(20px);
                 background: #1e1e20;
@@ -499,6 +577,18 @@ const CSS = `.m-habits {
             }
 
             /* ── Footer ── */
+            .app-footer {
+                border-top: 1px solid var(--border);
+                padding: 1rem 0;
+                display: flex;
+                justify-content: space-between;
+                margin-top: auto;
+            }
+            .app-footer span {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                color: var(--muted);
+            }
             .empty-state {
                 font-family: "DM Mono", monospace;
                 font-size: 12px;
@@ -830,28 +920,57 @@ const CSS = `.m-habits {
                     font-size: 0.9rem;
                 }
             }
-        
-}
-`;
+        </style>
+    </head>
+    <body>
+        <div class="grid-bg"></div>
+        <div class="blobs" id="blobs"></div>
 
-const TEMPLATE = `<div class="subnav"><div class="tabs">
-                <button class="tab active" onclick="HB.switchTab('heute', this)">
+        <div class="app-wrap">
+            <nav class="app-nav">
+                <a href="https://bensn.me" class="nav-crumb"
+                    ><span>bensn</span>.me</a
+                >
+                <span class="nav-sep">/</span>
+                <span class="nav-current">tracking</span>
+                <div class="nav-right">
+                    <div
+                        class="dot"
+                        id="statusDot"
+                        style="background: var(--muted); animation: none"
+                    ></div>
+                    <span id="statusText">laden…</span>
+                </div>
+            </nav>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('heute', this)">
                     Heute
                 </button>
-                <button class="tab" onclick="HB.switchTab('verlauf', this)">
+                <button class="tab" onclick="switchTab('verlauf', this)">
                     Verlauf
                 </button>
                 <button
                     class="tab"
-                    onclick="HB.switchTab('einstellungen', this)"
+                    onclick="switchTab('einstellungen', this)"
                     style="margin-left: auto"
                 >
                     ⚙
                 </button>
-            </div></div>
+            </div>
 
             <!-- ═══ TAB: HEUTE ═══ -->
             <div id="tab-heute" class="tab-section visible">
+                <div class="api-bar">
+                    <div class="dot-sm" id="apiDot"></div>
+                    <span id="apiStatusText">Verbinde…</span>
+                    <span
+                        class="api-bar-right"
+                        onclick="loadAll()"
+                        title="Neu laden"
+                        >↻</span
+                    >
+                </div>
                 <div id="heute-content"></div>
             </div>
 
@@ -866,12 +985,18 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
                 <div id="einstellungen-content"></div>
             </div>
 
-            <!-- ── Entry Bottom Sheet ── -->
+            <footer class="app-footer">
+                <span>tracking.bensn.me</span>
+                <span id="footer-clock"></span>
+            </footer>
+        </div>
+
+        <!-- ── Entry Bottom Sheet ── -->
         <div
             id="overlay"
             class="overlay"
             style="display: none"
-            onclick="HB.closeOverlay(event)"
+            onclick="closeOverlay(event)"
         >
             <div class="overlay-sheet" onclick="event.stopPropagation()">
                 <div class="sheet-label">Eintrag</div>
@@ -917,7 +1042,7 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
                     placeholder="z.B. neue Packung…"
                 />
                 <div class="sheet-btns">
-                    <button class="btn-save" onclick="HB.submitEntry()">
+                    <button class="btn-save" onclick="submitEntry()">
                         Speichern
                     </button>
                     <button
@@ -945,14 +1070,26 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
         <!-- Toast -->
         <div class="toast" id="toast"></div>
 
-        `;
-
-function build(core, root) {
-
+        <script src="/shared/bensn.js"></script>
+        <script>
             /* ════════════════════════════════════════════════════════════════
    API
    ════════════════════════════════════════════════════════════════ */
-            const apiFetch = (path, method = "GET", body = null) => core.api(path, { method, body });
+            const API_BASE = "";
+            function apiHeaders() {
+                return {
+                    "Content-Type": "application/json",
+                    "X-API-Key":
+                        "a9b571df1b237992f87e1126411403ff1ab57cf9aa9b9829015e4c842be8c6f5",
+                };
+            }
+            async function apiFetch(path, method = "GET", body = null) {
+                const opts = { method, headers: apiHeaders() };
+                if (body) opts.body = JSON.stringify(body);
+                const r = await fetch(API_BASE + path, opts);
+                if (!r.ok) throw new Error(r.status + " " + r.statusText);
+                return r.json();
+            }
 
             /* ════════════════════════════════════════════════════════════════
    STATE
@@ -1201,43 +1338,60 @@ function build(core, root) {
    LOAD
    ════════════════════════════════════════════════════════════════ */
             async function loadAll() {
+                setApiStatus("loading");
                 try {
-                    const [catData, trackingData, smokeData] =
+                    const [catData, trackingData, shiftsData] =
                         await Promise.all([
                             apiFetch("/api/tracking/categories"),
                             apiFetch("/api/tracking/entries?limit=500"),
-                            apiFetch("/api/smoke-breaks?days=730"),
+                            apiFetch("/api/shifts?limit=100"),
                         ]);
                     _categories = catData.categories || [];
                     _allEntries = trackingData.entries || [];
 
-                    // Arbeits-Zigaretten je Pause (mit Zeitstempel), nach Kalendertag der PAUSE
-                    // gruppiert — Pausen nach Mitternacht in Nachtdiensten zählen so zum
-                    // richtigen Tag. `breaks` hält die einzelnen Pausen fürs chronologische
-                    // Einsortieren im Verlauf, `shifts` die Summen je Station.
+                    const shifts = shiftsData.shifts || shiftsData || [];
                     const newWt = {};
-                    (smokeData.breaks || []).forEach((b) => {
-                        const dk = core.dayKey(b.break_start);
-                        const day = (newWt[dk] ||= {
-                            spicy: 0,
-                            blend: 0,
-                            shifts: [],
-                            breaks: [],
-                        });
-                        day.spicy += b.zig_spicy || 0;
-                        day.blend += b.zig_blend || 0;
-                        day.breaks.push(b);
-                        let st = day.shifts.find((x) => x.station === b.station);
-                        if (!st)
-                            day.shifts.push(
-                                (st = { station: b.station, spicy: 0, blend: 0 }),
-                            );
-                        st.spicy += b.zig_spicy || 0;
-                        st.blend += b.zig_blend || 0;
-                    });
+                    await Promise.all(
+                        shifts.map(async (s) => {
+                            try {
+                                const detail = await apiFetch(
+                                    `/api/shift/${s.id}`,
+                                );
+                                const breaks = detail.breaks || [];
+                                const sSpicy = breaks.reduce(
+                                    (a, b) => a + (b.zig_spicy || 0),
+                                    0,
+                                );
+                                const sBlend = breaks.reduce(
+                                    (a, b) => a + (b.zig_blend || 0),
+                                    0,
+                                );
+                                if (!sSpicy && !sBlend) return;
+                                const dk = new Date(
+                                    s.work_start,
+                                ).toLocaleDateString("en-CA", {
+                                    timeZone: "Europe/Vienna",
+                                });
+                                if (!newWt[dk])
+                                    newWt[dk] = {
+                                        spicy: 0,
+                                        blend: 0,
+                                        shifts: [],
+                                    };
+                                newWt[dk].spicy += sSpicy;
+                                newWt[dk].blend += sBlend;
+                                newWt[dk].shifts.push({
+                                    station: s.station,
+                                    spicy: sSpicy,
+                                    blend: sBlend,
+                                });
+                            } catch (_) {}
+                        }),
+                    );
                     _wtByDate = newWt;
                     _activeDay = null;
                     _apiOnline = true;
+                    setApiStatus("ok");
                     renderToday();
                     if (
                         document
@@ -1253,7 +1407,38 @@ function build(core, root) {
                         renderEinstellungen();
                 } catch (e) {
                     _apiOnline = false;
+                    setApiStatus("err", e.message);
                     renderToday();
+                }
+            }
+
+            function setApiStatus(state, msg) {
+                const dot = document.getElementById("apiDot");
+                const txt = document.getElementById("apiStatusText");
+                const nd = document.getElementById("statusDot");
+                const nt = document.getElementById("statusText");
+                const total = _allEntries.filter(
+                    (e) => e.date === todayKey(),
+                ).length;
+                if (state === "ok") {
+                    dot.className = "dot-sm ok";
+                    txt.textContent = `API verbunden · ${_allEntries.length} Einträge`;
+                    nd.style.background = "var(--green)";
+                    nd.style.animation = "pulse 2s ease-in-out infinite";
+                    nt.textContent = total + " heute";
+                } else if (state === "err") {
+                    dot.className = "dot-sm err";
+                    txt.textContent =
+                        "API nicht erreichbar" + (msg ? ` · ${msg}` : "");
+                    nd.style.background = "var(--accent-red)";
+                    nd.style.animation = "none";
+                    nt.textContent = "offline";
+                } else {
+                    dot.className = "dot-sm";
+                    txt.textContent = "Verbinde…";
+                    nd.style.background = "var(--muted)";
+                    nd.style.animation = "none";
+                    nt.textContent = "laden…";
                 }
             }
 
@@ -1325,7 +1510,7 @@ function build(core, root) {
                                     ${dispHtml}
                                 </div>
                                 <div class="item-actions">
-                                    <button class="btn-unit" onclick="HB.openEntry('${item.id}')">Eintrag</button>
+                                    <button class="btn-unit" onclick="openEntry('${item.id}')">Eintrag</button>
                                 </div>
                             </div>`;
                         } else if (item.tracking_mode === "vorrat") {
@@ -1363,7 +1548,7 @@ function build(core, root) {
                                 </div>
                                 <div class="item-actions">
                                     ${renderItemButtons(item)}
-                                    <button class="btn-icon" onclick="HB.openEntry('${item.id}')" title="Auffüllen / Entnahme">
+                                    <button class="btn-icon" onclick="openEntry('${item.id}')" title="Auffüllen / Entnahme">
                                         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"/></svg>
                                     </button>
                                 </div>
@@ -1427,7 +1612,7 @@ function build(core, root) {
                                 </div>
                                 <div class="item-actions">
                                     ${renderItemButtons(item)}
-                                    <button class="btn-icon" onclick="HB.openEntry('${item.id}')" title="Manuell / mit Notiz">
+                                    <button class="btn-icon" onclick="openEntry('${item.id}')" title="Manuell / mit Notiz">
                                         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"/></svg>
                                     </button>
                                 </div>
@@ -1528,7 +1713,6 @@ function build(core, root) {
                         spicy: 0,
                         blend: 0,
                         shifts: [],
-                        breaks: [],
                     };
 
                     const zaehlerTotals = {};
@@ -1563,9 +1747,8 @@ function build(core, root) {
                         })
                         .join("");
 
-                    // Eigene Einträge und Arbeits-Zigaretten (je Pause) in EINER Zeitreihe, neueste
-                    // zuerst: jede Zeile trägt ihren Zeitstempel zum Einsortieren.
-                    const rows = entries.map((e) => {
+                    const entryRows = entries
+                        .map((e) => {
                             const item = itemById(e.item_id);
                             let typeLabel;
                             const eAmt = parseFloat(e.amount) || 0;
@@ -1583,9 +1766,7 @@ function build(core, root) {
                             } else {
                                 typeLabel = `<span class="history-type-badge zaehler">+${fmtAmt(eAmt, item)}</span>`;
                             }
-                            return {
-                                ts: e.timestamp,
-                                html: `<div class="history-entry">
+                            return `<div class="history-entry">
                             <div class="history-row">
                                 <span class="history-time">${localTimeStr(e.timestamp)}</span>
                                 <span class="history-name">${e.name}</span>
@@ -1593,37 +1774,45 @@ function build(core, root) {
                                 <span class="history-amount">${e.note ? `<span style="color:var(--muted)">${e.note}</span>` : ""}</span>
                             </div>
                             <div class="history-actions">
-                                <button class="btn-pill" onclick="HB.openEditEntrySheet('${e.id}')">Bearbeiten</button>
-                                <button class="btn-pill red" onclick="HB.deleteEntry('${e.id}')">Löschen</button>
+                                <button class="btn-pill" onclick="openEditEntrySheet('${e.id}')">Bearbeiten</button>
+                                <button class="btn-pill red" onclick="deleteEntry('${e.id}')">Löschen</button>
                             </div>
-                        </div>`,
-                            };
-                    });
+                        </div>`;
+                        })
+                        .join("");
 
-                    // Zigaretten aus dem Arbeitstracker: eine Zeile je Pause und Sorte, mit der
-                    // Uhrzeit der Pause (nur lesbar, Bearbeiten geht im Work-Modul)
-                    (wtDay.breaks || []).forEach((b) => {
-                        [
-                            ["Spicy", b.zig_spicy],
-                            ["Zigarette", b.zig_blend],
-                        ].forEach(([name, n]) => {
-                            if (!n) return;
-                            rows.push({
-                                ts: b.break_start,
-                                html: `<div class="history-entry" style="opacity:.7">
+                    let wtRows = "";
+                    if (wtDay.spicy > 0) {
+                        const src =
+                            wtDay.shifts.map((s) => s.station).join(", ") ||
+                            "Dienst";
+                        wtRows += `<div class="history-entry" style="opacity:.7">
                             <div class="history-row">
-                                <span class="history-time">${localTimeStr(b.break_start)}</span>
-                                <span class="history-name">${name}</span>
+                                <span class="history-time" style="color:var(--accent-blue)">WT</span>
+                                <span class="history-name">Spicy</span>
                                 <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
-                                <span class="history-amount"><span>${n} Stk.</span> · ${b.station || "Dienst"}</span>
+                                <span class="history-amount"><span>${wtDay.spicy} Stk.</span> · ${src}</span>
                             </div>
-                        </div>`,
-                            });
-                        });
-                    });
-                    rows.sort((x, y) => new Date(y.ts) - new Date(x.ts));
-                    const entryRows = rows.map((r) => r.html).join("");
-                    const totalEntries = rows.length;
+                        </div>`;
+                    }
+                    if (wtDay.blend > 0) {
+                        const src =
+                            wtDay.shifts.map((s) => s.station).join(", ") ||
+                            "Dienst";
+                        wtRows += `<div class="history-entry" style="opacity:.7">
+                            <div class="history-row">
+                                <span class="history-time" style="color:var(--accent-blue)">WT</span>
+                                <span class="history-name">Zigarette</span>
+                                <span class="history-type-badge" style="background:rgba(0,166,237,.1);border:1px solid rgba(0,166,237,.25);color:var(--accent-blue)">Arbeit</span>
+                                <span class="history-amount"><span>${wtDay.blend} Stk.</span> · ${src}</span>
+                            </div>
+                        </div>`;
+                    }
+
+                    const totalEntries =
+                        entries.length +
+                        (wtDay.spicy > 0 ? 1 : 0) +
+                        (wtDay.blend > 0 ? 1 : 0);
                     container.innerHTML += `<div class="history-day">
                         <div class="day-header">
                             <span class="day-label">${dateLabelFor(date)}</span>
@@ -1631,7 +1820,7 @@ function build(core, root) {
                             <div class="day-line"></div>
                             ${totalBadges ? `<div style="display:flex;gap:.35rem;flex-wrap:wrap">${totalBadges}</div>` : ""}
                         </div>
-                        ${entryRows}
+                        ${entryRows}${wtRows}
                     </div>`;
                 });
             }
@@ -1647,7 +1836,7 @@ function build(core, root) {
                     <div class="settings-section">
                         <div class="settings-section-header">
                             <span class="settings-section-title">Kategorien & Items</span>
-                            <button class="btn-add" onclick="HB.openCatSheet(null)">+ Kategorie</button>
+                            <button class="btn-add" onclick="openCatSheet(null)">+ Kategorie</button>
                         </div>
                         ${_categories.map((cat) => renderSettingsCat(cat)).join("")}
                         ${!_categories.length ? '<div class="empty-state">Noch keine Kategorien.</div>' : ""}
@@ -1672,7 +1861,7 @@ function build(core, root) {
                                   ? "Vorrat"
                                   : "Zähler"
                         }</span>
-                        <button class="btn-edit-item" onclick="HB.openItemSheet('${item.id}','${cat.id}')" title="Bearbeiten">
+                        <button class="btn-edit-item" onclick="openItemSheet('${item.id}','${cat.id}')" title="Bearbeiten">
                             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"/></svg>
                         </button>
                     </div>`,
@@ -1680,7 +1869,7 @@ function build(core, root) {
                     .join("");
 
                 return `<div class="settings-cat" id="scat-${cat.id}">
-                    <div class="settings-cat-header" onclick="HB.toggleCat('${cat.id}')">
+                    <div class="settings-cat-header" onclick="toggleCat('${cat.id}')">
                         <span class="settings-cat-emoji">${cat.emoji}</span>
                         <span class="settings-cat-name">${cat.name}</span>
                         <span class="settings-cat-count">${items.length} Items</span>
@@ -1688,8 +1877,8 @@ function build(core, root) {
                     </div>
                     <div class="settings-cat-body" id="catbody-${cat.id}">
                         <div class="settings-cat-actions">
-                            <button class="btn-add" onclick="HB.openItemSheet(null,'${cat.id}')">+ Item</button>
-                            <button class="btn-edit-item" onclick="HB.openCatSheet('${cat.id}')" title="Kategorie bearbeiten" style="margin-left:auto">
+                            <button class="btn-add" onclick="openItemSheet(null,'${cat.id}')">+ Item</button>
+                            <button class="btn-edit-item" onclick="openCatSheet('${cat.id}')" title="Kategorie bearbeiten" style="margin-left:auto">
                                 <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M11.5 1.5l3 3-9 9H2.5v-3l9-9z"/></svg>
                             </button>
                         </div>
@@ -1748,7 +1937,7 @@ function build(core, root) {
                             ${EMOJIS.map(
                                 (
                                     e,
-                                ) => `<button onclick="HB.selectEmoji(this,'${e}')" data-val="${e}"
+                                ) => `<button onclick="selectEmoji(this,'${e}')" data-val="${e}"
                                 style="width:36px;height:36px;border-radius:8px;border:1px solid ${cat && cat.emoji === e ? "var(--accent-blue)" : "var(--border)"};background:${cat && cat.emoji === e ? "rgba(0,166,251,.08)" : "none"};font-size:16px;cursor:pointer;transition:all .15s">${e}</button>`,
                             ).join("")}
                         </div>
@@ -1757,14 +1946,14 @@ function build(core, root) {
                     <div class="sheet-row">
                         <div class="sheet-label" style="margin-bottom:6px">Farbe</div>
                         <div class="sheet-toggle" id="cs-colors">
-                            ${COLORS.map((c) => `<button class="sheet-toggle-btn ${cat && cat.color === c.val ? "active" : ""}" onclick="HB.selectColor(this,'${c.val}')" data-val="${c.val}">${c.label}</button>`).join("")}
+                            ${COLORS.map((c) => `<button class="sheet-toggle-btn ${cat && cat.color === c.val ? "active" : ""}" onclick="selectColor(this,'${c.val}')" data-val="${c.val}">${c.label}</button>`).join("")}
                         </div>
                         <input type="hidden" id="cs-color" value="${cat ? cat.color : "muted"}">
                     </div>
                     <div class="sheet-btns" style="margin-top:1rem">
-                        <button class="btn-save" onclick="HB.saveCat('${catId || ""}')">Speichern</button>
-                        <button class="btn-cancel" onclick="HB.closeSheet()">Abbrechen</button>
-                        ${cat ? `<button class="btn-pill red" onclick="HB.deleteCat('${catId}')">Löschen</button>` : ""}
+                        <button class="btn-save" onclick="saveCat('${catId || ""}')">Speichern</button>
+                        <button class="btn-cancel" onclick="closeSheet()">Abbrechen</button>
+                        ${cat ? `<button class="btn-pill red" onclick="deleteCat('${catId}')">Löschen</button>` : ""}
                     </div>
                     <div id="sheet-msg" style="font-family:'DM Mono',monospace;font-size:11px;margin-top:.5rem;text-align:center"></div>
                 `);
@@ -1880,7 +2069,7 @@ function build(core, root) {
                             item
                                 ? `<div style="display:flex;align-items:center;gap:.5rem">
                                 <code style="font-family:'DM Mono',monospace;font-size:12px;color:var(--accent-blue);background:rgba(0,166,251,.08);border:1px solid rgba(0,166,251,.2);border-radius:6px;padding:6px 10px;flex:1;word-break:break-all">${item.slug || "—"}</code>
-                                <button onclick="navigator.clipboard.writeText('${item.slug || ""}').then(()=>HB.showToast('Slug kopiert'))"
+                                <button onclick="navigator.clipboard.writeText('${item.slug || ""}').then(()=>showToast('Slug kopiert'))"
                                     style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--muted);font-size:11px;cursor:pointer;white-space:nowrap">Copy</button>
                                </div>`
                                 : `<input class="sheet-input" id="is-slug" type="text" placeholder="auto (aus Name generiert)" style="font-family:'DM Mono',monospace;font-size:12px">
@@ -1892,9 +2081,9 @@ function build(core, root) {
                         <div class="sheet-label" style="margin-bottom:6px">Tracking-Modus</div>
                         <div class="sheet-toggle">
                             <button class="sheet-toggle-btn ${mode === "zaehler" ? "active" : ""}"
-                                onclick="HB.selectMode(this,'zaehler')" data-val="zaehler">Zähler</button>
+                                onclick="selectMode(this,'zaehler')" data-val="zaehler">Zähler</button>
                             <button class="sheet-toggle-btn ${mode === "vorrat" || mode === "bestand" ? "active" : ""}"
-                                onclick="HB.selectMode(this,'vorrat')" data-val="vorrat">Vorrat</button>
+                                onclick="selectMode(this,'vorrat')" data-val="vorrat">Vorrat</button>
                         </div>
                         <input type="hidden" id="is-mode" value="${mode === "bestand" ? "vorrat" : mode}">
                         <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:.4rem" id="is-mode-hint">
@@ -1911,9 +2100,9 @@ function build(core, root) {
                         <div style="display:flex;gap:.4rem;align-items:center">
                             <div class="sheet-toggle" style="flex-shrink:0">
                                 <button class="sheet-toggle-btn ${dir === "+" ? "active" : ""}"
-                                    onclick="HB.selectDir(this,'+')" data-val="+">+</button>
+                                    onclick="selectDir(this,'+')" data-val="+">+</button>
                                 <button class="sheet-toggle-btn ${dir === "-" ? "active" : ""}"
-                                    onclick="HB.selectDir(this,'-')" data-val="-">−</button>
+                                    onclick="selectDir(this,'-')" data-val="-">−</button>
                             </div>
                             <input class="sheet-input" id="is-unitsize" type="number" min="0.001" step="any"
                                 value="${item ? item.unit_size : 1}" style="flex:1">
@@ -1930,7 +2119,7 @@ function build(core, root) {
                             ${UNITS.map(
                                 (
                                     u,
-                                ) => `<button onclick="HB.selectUnit(this,'${u}')" data-val="${u}"
+                                ) => `<button onclick="selectUnit(this,'${u}')" data-val="${u}"
                                 class="preset-btn"
                                 style="border-color:${item && item.base_unit === u ? "var(--accent-blue)" : "var(--border)"};color:${item && item.base_unit === u ? "var(--accent-blue)" : "var(--muted)"};background:${item && item.base_unit === u ? "rgba(0,166,251,.08)" : "none"}">${u}</button>`,
                             ).join("")}
@@ -1990,9 +2179,9 @@ function build(core, root) {
                     </div>
 
                     <div class="sheet-btns" style="margin-top:1rem">
-                        <button class="btn-save" onclick="HB.saveItem('${itemId || ""}','${catId}')">Speichern</button>
-                        <button class="btn-cancel" onclick="HB.closeSheet()">Abbrechen</button>
-                        ${item ? `<button class="btn-pill red" onclick="HB.deleteItem('${itemId}')">Löschen</button>` : ""}
+                        <button class="btn-save" onclick="saveItem('${itemId || ""}','${catId}')">Speichern</button>
+                        <button class="btn-cancel" onclick="closeSheet()">Abbrechen</button>
+                        ${item ? `<button class="btn-pill red" onclick="deleteItem('${itemId}')">Löschen</button>` : ""}
                     </div>
                     <div id="sheet-msg" style="font-family:'DM Mono',monospace;font-size:11px;margin-top:.5rem;text-align:center"></div>
                 `);
@@ -2171,8 +2360,7 @@ function build(core, root) {
                     "position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:flex;align-items:flex-end;justify-content:center;";
                 overlay.innerHTML = `<div onclick="event.stopPropagation()" style="background:#161616;border:1px solid rgba(255,255,255,.12);border-radius:16px 16px 0 0;padding:1.5rem 1.25rem 2.5rem;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">${html}</div>`;
                 overlay.addEventListener("click", closeSheet);
-                // Im Modul-Container, NICHT an <body>: das Modul-CSS (.m-habits …) greift nur darin
-                root.appendChild(overlay);
+                document.body.appendChild(overlay);
             }
             function closeSheet() {
                 document.getElementById("sheet-edit-overlay")?.remove();
@@ -2211,7 +2399,7 @@ function build(core, root) {
                         const safeAmt = JSON.stringify(amt);
                         const safeLbl = btn.label.replace(/'/g, "&#39;");
                         return `<button class="btn-unit"
-                        onclick="HB.tapButton('${item.id}',${safeAmt},'${safeLbl}')"
+                        onclick="tapButton('${item.id}',${safeAmt},'${safeLbl}')"
                         style="border-color:${color};color:${txtColor}">${btn.label}</button>`;
                     })
                     .join("");
@@ -2346,9 +2534,9 @@ function build(core, root) {
                             Aktueller Vorrat: <strong style="color:var(--text)">${bestandStr}</strong>
                         </div>
                         <div style="display:flex;gap:.4rem">
-                            <button class="sheet-toggle-btn" id="vr-fill" onclick="HB.setVorratMode('auffuellung')"
+                            <button class="sheet-toggle-btn" id="vr-fill" onclick="setVorratMode('auffuellung')"
                                 style="flex:1;border-color:rgba(74,222,128,.4);color:var(--green)">+ Auffüllen</button>
-                            <button class="sheet-toggle-btn" id="vr-take" onclick="HB.setVorratMode('entnahme')"
+                            <button class="sheet-toggle-btn" id="vr-take" onclick="setVorratMode('entnahme')"
                                 style="flex:1;border-color:rgba(255,0,81,.3);color:var(--accent-red)">− Entnahme</button>
                         </div>`;
                     setTimeout(() => setVorratMode(_overlayVorratMode), 0);
@@ -2504,8 +2692,8 @@ function build(core, root) {
                         <input class="sheet-input" id="ee-time" type="datetime-local" value="${isoToDatetimeLocal(entry.timestamp)}">
                     </div>
                     <div class="sheet-btns" style="margin-top:1rem">
-                        <button class="btn-save" onclick="HB.saveEditedEntry('${entryId}')">Speichern</button>
-                        <button class="btn-cancel" onclick="HB.closeSheet()">Abbrechen</button>
+                        <button class="btn-save" onclick="saveEditedEntry('${entryId}')">Speichern</button>
+                        <button class="btn-cancel" onclick="closeSheet()">Abbrechen</button>
                     </div>
                     <div id="sheet-msg" style="font-family:'DM Mono',monospace;font-size:11px;margin-top:.5rem;text-align:center"></div>
                 `);
@@ -2568,8 +2756,21 @@ function build(core, root) {
                 );
             }
 
-            /* ── Lifecycle (Gesamt-App): Listener/Overlays sauber aufräumen ── */
-            const onKeydown = (e) => {
+            function clockTick() {
+                const n = new Date();
+                const el = document.getElementById("footer-clock");
+                if (el)
+                    el.textContent =
+                        pad(n.getHours()) +
+                        ":" +
+                        pad(n.getMinutes()) +
+                        ":" +
+                        pad(n.getSeconds());
+            }
+            clockTick();
+            setInterval(clockTick, 1000);
+
+            document.addEventListener("keydown", (e) => {
                 if (
                     e.key === "Enter" &&
                     document.getElementById("overlay").style.display !== "none"
@@ -2579,37 +2780,15 @@ function build(core, root) {
                     document.getElementById("overlay").style.display = "none";
                     closeSheet();
                 }
-            };
-            function init() {
-                document.addEventListener("keydown", onKeydown);
-                return loadAll();
-            }
-            function dispose() {
-                document.removeEventListener("keydown", onKeydown);
-                clearTimeout(toastTimer);
-                document.getElementById("sheet-edit-overlay")?.remove();
-            }
+            });
 
-  window.HB = { pad, todayKey, fmtAmt, localTimeStr, localDateStr, allItems, itemBySlug, itemById, entriesForItem, zaehlerToday, vorratBestand, vorratHasAnyEntries, vorratTodayUsed, wtLinkedDeduction, wtLinkedDeductionForDay, fmtAmtWithPack, zaehlerTodayNet, catColorClass, loadAll, renderToday, renderVerlauf, renderEinstellungen, renderSettingsCat, toggleCat, openCatSheet, selectEmoji, selectColor, saveCat, deleteCat, openItemSheet, selectDir, selectMode, selectUnit, saveItem, deleteItem, showSheet, closeSheet, renderItemButtons, tapButton, quickAdd, quickVorrat, openEntry, setVorratMode, closeOverlay, submitEntry, postEntry, deleteEntry, isoToDatetimeLocal, openEditEntrySheet, saveEditedEntry, switchTab, showToast, init, dispose };
-  return { init, dispose };
-}
-
-let styleEl = null;
-let instance = null;
-export default {
-  async mount(root, core) {
-    styleEl = document.createElement("style");
-    styleEl.textContent = CSS;
-    document.head.append(styleEl);
-    root.innerHTML = TEMPLATE;
-    instance = build(core, root);
-    await instance.init();
-  },
-  unmount() {
-    instance?.dispose();
-    instance = null;
-    styleEl?.remove();
-    styleEl = null;
-    delete window.HB;
-  },
-};
+            /* ── INIT ── */
+            loadAll();
+        </script>
+        <script>
+            if ("serviceWorker" in navigator) {
+                navigator.serviceWorker.register("/sw.js").catch(() => {});
+            }
+        </script>
+    </body>
+</html>

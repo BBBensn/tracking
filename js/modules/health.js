@@ -2,6 +2,9 @@
 // Aus health.bensn.me übernommen. Zwei Besonderheiten gegenüber der Einzel-App:
 //  - Handler in Inline-onclick laufen über den Namespace window.HL (nur solange gemountet).
 //  - API-Aufrufe gehen über core.apiHealth ("/api/..." wird zu "/hapi/...").
+//  - Verlauf: gemeinsame Komponente js/history.js (Monate einklappbar, Liste/Kalender).
+
+import { createHistory } from "../history.js";
 
 const CSS = `.m-health {
       /* ── Tabs (scrollt horizontal statt die ganze Seite, wie feed's #filtersWrap) ── */
@@ -100,6 +103,11 @@ const CSS = `.m-health {
       }
       .med-confirm-count button { width: 26px; height: 26px; padding: 0; }
       .med-confirm-count span { min-width: 1.2em; text-align: center; }
+      .med-confirm-count input {
+        width: 4.4rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+        padding: 6px 8px; color: var(--text); font-family: "DM Mono", monospace; font-size: 13px; text-align: center;
+      }
+      .med-confirm-count .mc-unit { min-width: 0; color: var(--muted); font-size: 11px; }
       .med-confirm-bar > .btn-pill { flex-shrink: 0; }
 
       /* ── Icon-only button (Material Symbols) ── */
@@ -210,9 +218,15 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
         <div class="med-confirm-bar" id="medConfirmBar">
           <input type="datetime-local" id="medConfirmTime">
           <div class="med-confirm-count" id="medConfirmCountRow" style="display:none">
-            <button class="btn-pill" onclick="HL.stepMedConfirmCount(-1)">−</button>
-            <span id="medConfirmCountVal">1</span>
-            <button class="btn-pill" onclick="HL.stepMedConfirmCount(1)">+</button>
+            <span id="medConfirmStepper" style="display:flex;align-items:center;gap:0.4rem">
+              <button class="btn-pill" onclick="HL.stepMedConfirmCount(-1)">−</button>
+              <span id="medConfirmCountVal">1</span>
+              <button class="btn-pill" onclick="HL.stepMedConfirmCount(1)">+</button>
+            </span>
+            <span id="medConfirmDropsWrap" style="display:none;align-items:center;gap:0.4rem">
+              <input type="number" id="medConfirmDrops" min="1" max="999" inputmode="numeric" value="1" />
+              <span class="mc-unit">Tropfen</span>
+            </span>
           </div>
           <button class="btn-pill" onclick="HL.cancelMedSelection()">Abbrechen</button>
           <button class="btn-pill green" onclick="HL.confirmMedSelection()">Bestätigen</button>
@@ -287,7 +301,12 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
       <div class="overlay-sheet">
         <div class="sheet-title">Neues Medikament</div>
         <div class="input-row"><input type="text" id="newMedName" placeholder="Name" style="font-size: 1rem" /></div>
-        <div class="input-row"><input type="number" id="newMedDose" placeholder="Dosis" step="0.5" /><span class="input-unit">mg</span></div>
+        <div class="sheet-label">Einnahme-Form</div>
+        <div class="tag-picker" id="newMedUnitPicker">
+          <button class="tag-btn active" data-unit="tablet" onclick="HL.setNewMedUnit('tablet', this)">Tabletten</button>
+          <button class="tag-btn" data-unit="drops" onclick="HL.setNewMedUnit('drops', this)">Tropfen</button>
+        </div>
+        <div class="input-row"><input type="number" id="newMedDose" placeholder="Dosis" step="0.5" /><span class="input-unit" id="newMedDoseUnit">mg je Tablette</span></div>
         <div class="tag-picker">
           <button class="tag-btn" id="newMedPrnToggle" onclick="HL.toggleNewMedPrn(this)">Bedarfsorientiert (PRN)</button>
         </div>
@@ -426,6 +445,7 @@ function build(core) {
       let _selectedNoteEffects = [];
       let _noteLogId = null;
       let _newMedPrn = false;
+      let _newMedUnit = "tablet";
       let _apiOnline = false;
 
       /* ════════════ TABS ════════════ */
@@ -481,9 +501,25 @@ function build(core) {
 
       let _medConfirmCount = 1;
 
+      const medById = (id) => _lastActiveMeds.find((m) => m.id === id);
+      const isDrops = (m) => !!m && m.unit === "drops";
+      // Zuletzt bestätigte Tropfenzahl je Medikament merken (typisch immer dieselbe Menge)
+      function lastDrops(medId) {
+        try { return parseInt(localStorage.getItem("bensn.drops." + medId)) || 1; } catch (_) { return 1; }
+      }
+      function rememberDrops(medId, n) {
+        try { localStorage.setItem("bensn.drops." + medId, String(n)); } catch (_) { /* privat/geblockt */ }
+      }
       function toggleMedSelect(medId) {
-        if (_selectedMedIds.has(medId)) _selectedMedIds.delete(medId);
-        else _selectedMedIds.add(medId);
+        if (_selectedMedIds.has(medId)) {
+          _selectedMedIds.delete(medId);
+        } else {
+          // Tropfen haben eine eigene Mengenangabe und werden deshalb immer einzeln bestätigt —
+          // sonst wäre unklar, auf welches der gleichzeitig gewählten Medikamente sie sich beziehen
+          const anyDrops = [..._selectedMedIds].some((id) => isDrops(medById(id)));
+          if (isDrops(medById(medId)) || anyDrops) _selectedMedIds.clear();
+          _selectedMedIds.add(medId);
+        }
         renderMedChecklistDOM();
       }
       // Anzahl-Stepper ("2x Ritalin auf einmal") nur sinnvoll, wenn genau EIN
@@ -498,8 +534,14 @@ function build(core) {
           if (!timeInput.value) timeInput.value = nowForDatetimeLocal();
           const onlyId = _selectedMedIds.size === 1 ? Array.from(_selectedMedIds)[0] : null;
           const onlyMed = onlyId ? _lastActiveMeds.find((m) => m.id === onlyId) : null;
-          if (onlyMed && onlyMed.is_prn) {
+          if (onlyMed && (onlyMed.is_prn || isDrops(onlyMed))) {
             countRow.style.display = "flex";
+            const drops = isDrops(onlyMed);
+            document.getElementById("medConfirmStepper").style.display = drops ? "none" : "flex";
+            const wrap = document.getElementById("medConfirmDropsWrap");
+            wrap.style.display = drops ? "flex" : "none";
+            const inp = document.getElementById("medConfirmDrops");
+            if (drops && inp.dataset.med !== onlyMed.id) { inp.value = lastDrops(onlyMed.id); inp.dataset.med = onlyMed.id; }
           } else {
             countRow.style.display = "none";
             _medConfirmCount = 1;
@@ -523,7 +565,13 @@ function build(core) {
       async function confirmMedSelection() {
         const iso = toIsoOrNull(document.getElementById("medConfirmTime").value);
         const ids = Array.from(_selectedMedIds);
-        const count = _medConfirmCount;
+        let count = _medConfirmCount;
+        const only = ids.length === 1 ? medById(ids[0]) : null;
+        if (isDrops(only)) {
+          count = parseInt(document.getElementById("medConfirmDrops").value);
+          if (!count || count < 1) return alert("Anzahl Tropfen angeben");
+          rememberDrops(only.id, count);
+        }
         await Promise.all(ids.map((id) => apiFetch("/api/medication-log", "POST", { medication_id: id, taken_at: iso, count })));
         _medConfirmCount = 1;
         await loadMedChecklist();
@@ -538,7 +586,13 @@ function build(core) {
         document.getElementById("newMedNotes").value = "";
         _newMedPrn = false;
         document.getElementById("newMedPrnToggle").classList.remove("active");
+        setNewMedUnit("tablet", document.querySelector('#newMedUnitPicker [data-unit="tablet"]'));
         openSheet("medCreate");
+      }
+      function setNewMedUnit(unit, btn) {
+        _newMedUnit = unit;
+        btn.parentElement.querySelectorAll(".tag-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        document.getElementById("newMedDoseUnit").textContent = unit === "drops" ? "mg je Tropfen" : "mg je Tablette";
       }
       function toggleNewMedPrn(btn) {
         _newMedPrn = !_newMedPrn;
@@ -552,6 +606,7 @@ function build(core) {
           name,
           dose_mg: parseFloat(document.getElementById("newMedDose").value) || null,
           is_prn: _newMedPrn,
+          unit: _newMedUnit,
           valid_from: document.getElementById("newMedValidFrom").value || null,
           valid_to: document.getElementById("newMedValidTo").value || null,
           notes: document.getElementById("newMedNotes").value || null,
@@ -664,9 +719,9 @@ function build(core) {
         // genommen) — nur tägliche Medikamente zeigen den erledigt-Status persistent.
         const showDone = a && a.taken_today && !m.is_prn;
         const isSelected = _selectedMedIds.has(m.id);
-        const doseLabel = m.dose_mg ? `${m.dose_mg}mg` : "";
+        const doseLabel = m.dose_mg ? `${m.dose_mg}mg${isDrops(m) ? "/Tropfen" : ""}` : "";
         const countLabel = a && a.taken_count_today
-          ? `${a.taken_count_today}× heute${a.last_taken_at ? " · zuletzt " + fmtTime(a.last_taken_at) : ""}`
+          ? `${a.taken_count_today}${isDrops(m) ? " Tropfen" : "×"} heute${a.last_taken_at ? " · zuletzt " + fmtTime(a.last_taken_at) : ""}`
           : "";
         const editTimeBtn = a && a.taken_today && a.last_log_id
           ? `<button class="btn-pill" style="margin-top:6px" onclick="event.stopPropagation(); HL.openEditTimeSheet('med','${a.last_log_id}','${a.last_taken_at}')">Zeit ändern</button>`
@@ -705,7 +760,7 @@ function build(core) {
       }
 
       function renderMedProfileCard(m, isActive) {
-        const doseLabel = m.dose_mg ? `${m.dose_mg}mg` : "";
+        const doseLabel = m.dose_mg ? `${m.dose_mg}mg${m.unit === "drops" ? "/Tropfen" : ""}` : "";
         const period = `${fmtDate(m.valid_from)} – ${m.valid_to ? fmtDate(m.valid_to) : "heute"}`;
         return `
           <div class="med-profile-card">
@@ -713,6 +768,7 @@ function build(core) {
               <div>
                 <span class="med-profile-name">${m.name}</span>
                 ${m.is_prn ? '<span class="pill prn">PRN</span>' : ""}
+                ${m.unit === "drops" ? '<span class="pill">Tropfen</span>' : ""}
                 ${isActive ? '<span class="pill active">Aktiv</span>' : ""}
               </div>
               <div class="med-profile-dose">${doseLabel}</div>
@@ -743,28 +799,66 @@ function build(core) {
       // sie erneut vom Server zu laden.
       let _verlaufDataById = {};
 
+      let _hx = null, _verlaufRows = new Map();
+      const VERLAUF_COLOR = { med: "var(--accent-blue)", bp: "var(--accent-red)", weight: "var(--orange)" };
+
+      function verlaufRowHtml(r) {
+        const notesHtml = r.effectNotes && r.effectNotes.length
+          ? `<div class="effect-notes">${r.effectNotes
+              .map(
+                (n) => `<div class="effect-note">
+                  <div class="effect-note-main"><span class="effect-note-time">${fmtTime(n.noted_at)}</span>${n.effects && n.effects.length ? " · " + n.effects.join(", ") : ""}${n.note ? " · " + n.note : ""}</div>
+                  <button class="btn-icon" title="Bearbeiten" onclick="HL.openEditEntrySheet('note','${n.id}','${n.noted_at}')"><span class="material-symbols-outlined">edit</span></button>
+                </div>`
+              )
+              .join("")}</div>`
+          : "";
+        const addNoteBtn = r.type === "med"
+          ? `<button class="btn-pill green" style="margin-top:6px" onclick="HL.openMedNoteSheet('${r.logId}', '${r.medName.replace(/'/g, "\\'")}')">+ Beobachtung</button>`
+          : "";
+        return `
+          <div class="entry-row" style="flex-direction:column; align-items:stretch">
+            <div style="display:flex; align-items:center; gap:0.7rem">
+              <div class="entry-dot ${r.type}"></div>
+              <div class="entry-main">
+                <div class="entry-title">${r.title}</div>
+                ${r.sub ? `<div class="entry-sub">${r.sub}</div>` : ""}
+              </div>
+              <div class="entry-time">${fmtTime(r.time)}</div>
+              <button class="btn-icon" title="Bearbeiten" onclick="HL.openEditEntrySheet('${r.type}','${r.id}','${r.time}')"><span class="material-symbols-outlined">edit</span></button>
+            </div>
+            ${notesHtml}
+            ${addNoteBtn}
+          </div>`;
+      }
+
       async function loadVerlauf() {
         const el = document.getElementById("verlaufList");
-        el.innerHTML = '<div class="empty-state">Lädt…</div>';
+        if (!_hx) _hx = createHistory(el, {
+          key: "health",
+          renderDay: (day) => ({ body: (_verlaufRows.get(day) || []).map(verlaufRowHtml).join("") }),
+        });
+        if (!_verlaufRows.size) _hx.setMessage("Lädt…");
         let meds, bps, weights;
         try {
           [meds, bps, weights] = await Promise.all([
-            apiFetch("/api/medication-logs?limit=50"),
-            apiFetch("/api/bp-logs?limit=50"),
-            apiFetch("/api/weight-logs?limit=50"),
+            apiFetch("/api/medication-logs?limit=500"),
+            apiFetch("/api/bp-logs?limit=500"),
+            apiFetch("/api/weight-logs?limit=500"),
           ]);
         } catch (e) {
-          el.innerHTML = `<div class="empty-state">API nicht erreichbar · ${e.message}</div>`;
+          _hx.setMessage(`API nicht erreichbar · ${e.message}`);
           return;
         }
         _verlaufDataById = {};
         const rows = [
           ...meds.map((m) => {
-            _verlaufDataById[m.id] = { count: m.count || 1 };
+            const drops = m.unit === "drops";
+            _verlaufDataById[m.id] = { count: m.count || 1, unit: m.unit || "tablet" };
             return {
               type: "med", id: m.id, time: m.taken_at,
-              title: (m.count > 1 ? `${m.count}× ` : "") + m.medication_name,
-              sub: m.dose_mg ? `${m.dose_mg}mg` : "",
+              title: drops ? m.medication_name : (m.count > 1 ? `${m.count}× ` : "") + m.medication_name,
+              sub: drops ? `${m.count} Tropfen${m.dose_mg ? ` · ${m.dose_mg}mg/Tropfen` : ""}` : (m.dose_mg ? `${m.dose_mg}mg` : ""),
               logId: m.id, medName: m.medication_name, effectNotes: m.effect_notes || [],
             };
           }),
@@ -789,43 +883,14 @@ function build(core) {
           }
         });
 
-        if (!rows.length) {
-          el.innerHTML = '<div class="empty-state">Noch keine Einträge.</div>';
-          return;
-        }
-        el.innerHTML = groupByDayHtml(
-          rows,
-          (r) => dayKeyVienna(r.time),
-          (r) => {
-            const notesHtml = r.effectNotes && r.effectNotes.length
-              ? `<div class="effect-notes">${r.effectNotes
-                  .map(
-                    (n) => `<div class="effect-note">
-                      <div class="effect-note-main"><span class="effect-note-time">${fmtTime(n.noted_at)}</span>${n.effects && n.effects.length ? " · " + n.effects.join(", ") : ""}${n.note ? " · " + n.note : ""}</div>
-                      <button class="btn-icon" title="Bearbeiten" onclick="HL.openEditEntrySheet('note','${n.id}','${n.noted_at}')"><span class="material-symbols-outlined">edit</span></button>
-                    </div>`
-                  )
-                  .join("")}</div>`
-              : "";
-            const addNoteBtn = r.type === "med"
-              ? `<button class="btn-pill green" style="margin-top:6px" onclick="HL.openMedNoteSheet('${r.logId}', '${r.medName.replace(/'/g, "\\'")}')">+ Beobachtung</button>`
-              : "";
-            return `
-          <div class="entry-row" style="flex-direction:column; align-items:stretch">
-            <div style="display:flex; align-items:center; gap:0.7rem">
-              <div class="entry-dot ${r.type}"></div>
-              <div class="entry-main">
-                <div class="entry-title">${r.title}</div>
-                ${r.sub ? `<div class="entry-sub">${r.sub}</div>` : ""}
-              </div>
-              <div class="entry-time">${fmtTime(r.time)}</div>
-              <button class="btn-icon" title="Bearbeiten" onclick="HL.openEditEntrySheet('${r.type}','${r.id}','${r.time}')"><span class="material-symbols-outlined">edit</span></button>
-            </div>
-            ${notesHtml}
-            ${addNoteBtn}
-          </div>`;
-          }
-        );
+        _verlaufRows = new Map();
+        rows.forEach((r) => {
+          const k = dayKeyVienna(r.time);
+          (_verlaufRows.get(k) || _verlaufRows.set(k, []).get(k)).push(r);
+        });
+        const days = new Map();
+        _verlaufRows.forEach((list, k) => days.set(k, { count: list.length, marks: list.map((r) => VERLAUF_COLOR[r.type]) }));
+        _hx.setData(days);
       }
 
       /* ════════════ EDIT-TIME / DELETE (Medikamente, BP, Gewicht, Beobachtungen) ════════════ */
@@ -884,8 +949,10 @@ function build(core) {
         const fieldsEl = document.getElementById("editEntryFields");
         if (type === "med") {
           _editEntryCount = data.count || 1;
-          fieldsEl.innerHTML = `
-            <div class="sheet-label">Anzahl</div>
+          fieldsEl.innerHTML = data.unit === "drops"
+            ? `<div class="sheet-label">Tropfen</div>
+               <div class="input-row"><input type="number" id="editEntryDrops" min="1" max="999" inputmode="numeric" value="${_editEntryCount}" /><span class="input-unit">Tropfen</span></div>`
+            : `<div class="sheet-label">Anzahl</div>
             <div class="med-confirm-count" style="margin-bottom:1rem">
               <button class="btn-pill" onclick="HL.stepEditEntryCount(-1)">−</button>
               <span id="editEntryCountVal">${_editEntryCount}</span>
@@ -934,7 +1001,9 @@ function build(core) {
         const map = ENTRY_API_MAP[_editEntryType];
         const body = { [map.timeField]: newIso };
         if (_editEntryType === "med") {
-          body.count = _editEntryCount;
+          const dropsEl = document.getElementById("editEntryDrops");
+          body.count = dropsEl ? parseInt(dropsEl.value) : _editEntryCount;
+          if (!body.count || body.count < 1) return alert("Anzahl angeben");
         } else if (_editEntryType === "note") {
           body.effects = _selectedNoteEffects;
           body.note = document.getElementById("editEntryNoteText").value || null;
@@ -1129,7 +1198,7 @@ function build(core) {
       const HISTORY_CONFIGS = {
         bp: {
           title: "Blutdruck · Verlauf",
-          load: () => apiFetch("/api/bp-logs?limit=50"),
+          load: () => apiFetch("/api/bp-logs?limit=500"),
           dateField: (r) => r.measured_at,
           row: (r) => ({
             dot: "bp", time: fmtTime(r.measured_at),
@@ -1139,7 +1208,7 @@ function build(core) {
         },
         weight: {
           title: "Gewicht · Verlauf",
-          load: () => apiFetch("/api/weight-logs?limit=50"),
+          load: () => apiFetch("/api/weight-logs?limit=500"),
           dateField: (r) => r.measured_at,
           row: (r) => ({ dot: "weight", time: fmtTime(r.measured_at), title: `${r.weight_kg} kg`, sub: r.notes || "" }),
         },
@@ -1212,7 +1281,7 @@ function build(core) {
       /* ════════════ INIT ════════════ */
       async function init() { await loadMedChecklist(); }
 
-  window.HL = { switchTab, openSheet, closeSheet, capitalize, setYesNoToggle, renderEffectTagsInto, toggleNoteEffect, toggleMedSelect, renderMedConfirmBar, stepMedConfirmCount, cancelMedSelection, confirmMedSelection, openMedCreateSheet, toggleNewMedPrn, saveNewMed, endMedication, openMedNoteSheet, saveMedNote, saveBp, saveWeight, loadMedChecklist, renderMedChecklistDOM, renderMedChecklistRow, loadMedProfiles, renderMedProfileCard, deleteMedication, fmtDate, loadVerlauf, openEditTimeSheet, saveEditedTime, openEditEntrySheet, stepEditEntryCount, saveEditEntry, deleteEditEntry, fmtTime, dayKeyVienna, dayLabelFor, groupByDayHtml, loadDashboard, loadOura, openHistoryModal, drawSparkline, init };
+  window.HL = { setNewMedUnit, switchTab, openSheet, closeSheet, capitalize, setYesNoToggle, renderEffectTagsInto, toggleNoteEffect, toggleMedSelect, renderMedConfirmBar, stepMedConfirmCount, cancelMedSelection, confirmMedSelection, openMedCreateSheet, toggleNewMedPrn, saveNewMed, endMedication, openMedNoteSheet, saveMedNote, saveBp, saveWeight, loadMedChecklist, renderMedChecklistDOM, renderMedChecklistRow, loadMedProfiles, renderMedProfileCard, deleteMedication, fmtDate, loadVerlauf, openEditTimeSheet, saveEditedTime, openEditEntrySheet, stepEditEntryCount, saveEditEntry, deleteEditEntry, fmtTime, dayKeyVienna, dayLabelFor, groupByDayHtml, loadDashboard, loadOura, openHistoryModal, drawSparkline, init };
   return { init };
 }
 
