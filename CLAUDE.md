@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Habit-/Verbrauchstracker PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v1.6.3
+- **Version:** v1.7.0 (Gesamt-App-Vorschau unter /next/; Live-App unter / ist noch die alte)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -111,6 +111,53 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
 
 ---
 
+## Gesamt-App-Umbau (läuft seit 2026-10-03)
+
+**Entscheidung:** `tracking.bensn.me` wird die eine App für Arbeit, Gesundheit, Essen, Habits
+und Sport (untere Tab-Leiste, oben je Tracker die bisherigen Sub-Tabs). **Außen vor bleiben**
+feed, location (OwnTracks-Ingest), library, stream, landing. Backends bleiben getrennte
+Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammengeführt.
+
+**Datensicherheit (Regeln für alle Schritte dieses Umbaus):**
+- Vor jedem Schritt mit Schema-/Datenänderung: `pg_dump` (nächtlich per Cron nach
+  `/root/backups/`, 14 Tage; manuelle Kopie in `~/Documents/Coding/bensn-backups/`)
+- Nur additive Schema-Änderungen (neue Tabellen/Spalten), nichts löschen oder umbenennen,
+  solange die Alt-Apps noch laufen. Migrationen als Kopie, nicht als Verschiebung
+- Alt-Apps (health./worktracker./tracking. unter `/`) bleiben bis zum Cutover unverändert
+  live — die Gesamt-App liest/schreibt dieselbe DB, ein Rückfall ist jederzeit möglich
+- `worktracker.bensn.me` bleibt auch nach dem Cutover erreichbar (iOS-Kurzbefehle +
+  OwnTracks hängen an `/api/` dort), ebenso `health.bensn.me/api/oura/callback`
+
+**Architektur** (`next/`, später `/`): `index.html` (Shell) · `css/app.css` ·
+`js/core.js` (api, Zeit, Fehlerbanner) · `js/app.js` (Router) · `js/modules/<id>.js`.
+- Immer **genau ein Modul gemountet** (`mount(root, core)` / `unmount()`), Wechsel lädt
+  frisch. Grund: die Alt-Apps teilen Element-IDs (`tab-verlauf`, …) und globale Namen
+- Inline-`onclick` läuft über einen Namespace pro Modul (`window.HL` für health), der nur
+  während des Mountens existiert. Neue Module: gleiches Muster oder `addEventListener`
+- Modul-CSS steht als `.m-<id> { … }` (natives CSS-Nesting). Gemeinsames gehört nach
+  `/shared/bensn.css`, nicht in ein Modul
+- API immer über `core.api()` / `core.apiHealth()` — nie rohes `fetch`. Die Wrapper
+  erkennen abgelaufene Sessions (`redirect: "manual"` → opaqueredirect) und zeigen das
+  Fehlerbanner. `/hapi/…` → health-api `/api/…` (eigener Prefix, weil bensn-api schon
+  `/api/health/…` belegt)
+- Sheets (`z-index: 100`) liegen über der Tab-Leiste (50), Banner (200) über allem.
+  `.view` hat bewusst kein `z-index` (sonst Stacking-Context). Sticky Leisten unten
+  nutzen `bottom: calc(var(--nav-clear) + …)`
+
+**Arbeitsweise (lokal gegen echte Daten, ohne Deploy):**
+```bash
+ssh -f -N -L 8125:127.0.0.1:5001 bensn; ssh -f -N -L 8123:127.0.0.1:5008 bensn
+API_KEY=$(ssh bensn "grep -o '[a-f0-9]\{64\}' /etc/nginx/sites-enabled/tracking.bensn.me | head -1") \
+  python3 tracking/tools/devserver.py 9300      # → http://127.0.0.1:9300/next/
+```
+Achtung: das ist die **echte Datenbank** — Testeinträge sofort wieder löschen.
+
+**Phasen:** ✅ 0 Backup-Cron · ✅ 1 Shell + Modul Gesundheit (Vorschau `/next/`) ·
+⬜ 2 Essen (neu: Katalog, Mahlzeit-Zeilen, Koffein/Zucker, Red-Bull-Migration) ·
+⬜ 3 Habits (= bisheriges tracking) · ⬜ 4 Arbeit (worktracker, zuletzt) ·
+⬜ 5 Cutover (`next/` → Root, alte Vhosts leiten um, neuer Service Worker, Feed-Anpassung) ·
+⬜ 6 Sport · ⬜ Kurzbefehle/Quick-Log-API mit eigenen Tokens (danach)
+
 ## Roadmap
 
 | Version | Feature | Status |
@@ -123,6 +170,7 @@ Backend-Änderungen (`/api/tracking/*`) werden im `bensn-meta`-Repo gepflegt und
 | v1.6.1 | `.btn-pill`/`.btn-save`/`.btn-cancel` aus lokalem CSS entfernt, kommen jetzt zentral aus `bensn-meta/shared/bensn.css` (dabei `.btn-cancel`-Padding-Abweichung auf den Standardwert angeglichen) — keine sichtbare Änderung außer diesem 2px-Fix | ✅ deployed (2026-09-16) |
 | v1.6.2 | `.btn-danger` entfernt, Kategorie-/Item-Löschen in den Einstellungen-Sheets nutzt jetzt `.btn-pill.red` — konvergiert mit health.bensn.mes Löschen-Buttons in Sheets | ✅ deployed (2026-09-16) |
 | v1.6.3 | Bugfix: Service Worker konnte auf Safari/Mobilfunk komplett ausfallen ("FetchEvent.respondWith received an error: Returned response is null") — `fetch(...).catch(() => caches.match(...))` resolvte bei Netzwerkfehler + Cache-Miss zu `undefined`, was WebKit als fatalen Fehler wertet (Chromium verzeiht das). Cache-Fallback gibt jetzt immer ein echtes Response-Objekt zurück, notfalls eine 503-Antwort. Gleicher Fix in `health`/`feed` (identischer sw.js-Code in allen drei Apps) | ✅ deployed (2026-09-19) |
+| v1.7.0 | Gesamt-App-Vorschau unter `/next/`: Shell mit schwebender unterer Tab-Leiste, Fehlerbanner statt Status-Anzeige, Router, Modul Gesundheit (aus health.bensn.me übernommen, noch ohne Änderungen am Verhalten). Neue Nginx-Routen `/next/` und `/hapi/`; täglicher DB-Backup-Cron | ✅ deployed (2026-10-03) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 
