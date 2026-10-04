@@ -59,6 +59,9 @@ const CSS = `.m-food {
   .fd-amt .input-row input { font-size: 1rem; min-width: 0; width: 100%; text-align: right; }
   .fd-chips { display: flex; gap: 4px; }
   .fd-chips button { font-family: "DM Mono", monospace; font-size: 10.5px; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; }
+  .fd-search { margin: 1rem 0 0.2rem; }
+  .fd-search .material-symbols-outlined { font-size: 20px; color: var(--muted); }
+  .fd-search input { font-size: 1rem; min-width: 0; }
   .fd-bundle { display: flex; align-items: center; gap: 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.8rem 0.9rem; margin-bottom: 0.5rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .fd-bundle:active { background: rgba(255, 255, 255, 0.04); }
   .fd-bundle .material-symbols-outlined { color: var(--accent-blue); font-size: 22px; }
@@ -124,7 +127,7 @@ function build(core, root) {
   const $ = (id) => root.querySelector("#" + id);
 
   const st = {
-    tab: "heute", kind: "all",
+    tab: "heute", kind: "all", q: { heute: "", katalog: "" },   // Suchtexte je Tab
     foods: [], bundles: [], meals: [], summary: [],
     cart: new Map(), extra: [],      // Warenkorb: food_id -> qty, plus freie Posten
     draft: null,                     // Eingaben im offenen Sheet (Zeit/Label/Notiz/…)
@@ -138,6 +141,11 @@ function build(core, root) {
   const n1 = (v) => { const x = Math.round((Number(v) || 0) * 10) / 10; return Number.isInteger(x) ? String(x) : x.toFixed(1).replace(".", ","); };
   // Schritte: 0,5 → 1 → 2 → 3 … (halbe Portionen sind erlaubt, darunter wird entfernt)
   const stepQty = (q, d) => (d > 0 ? q + (q < 1 ? 0.5 : 1) : q - (q > 1 ? 1 : 0.5));
+  // Suche: ohne Groß-/Kleinschreibung und Akzente ("Bällchen" findet "ballchen"), alle Wörter müssen vorkommen
+  const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const matches = (name, q) => { const n = norm(name); return norm(q).split(/\s+/).filter(Boolean).every((w) => n.includes(w)); };
+  const searchBox = (key) => `<div class="input-row fd-search"><span class="material-symbols-outlined">search</span>
+    <input type="search" data-search="${key}" placeholder="Suchen …" autocomplete="off" value="${esc(st.q[key])}"></div>`;
   const foodMap = () => new Map(st.foods.map((f) => [f.id, f]));
   // Lebensmittel mit Basis g/ml: Menge in g/ml, Nährwerte pro 100. Sonst: Anzahl Portionen.
   const isG = (f) => !!f && !!f.basis && f.basis !== "portion";
@@ -211,10 +219,27 @@ function build(core, root) {
       ${lines}${m.note ? `<div class="fd-note">${esc(m.note)}</div>` : ""}</div>`;
   }
 
+  // Gerichte + Favoriten (gefiltert nach Suche und Essen/Getränke) — wird beim Tippen allein neu gezeichnet,
+  // damit das Suchfeld den Fokus behält
+  function heuteLists() {
+    const q = st.q.heute;
+    const bundles = st.bundles.filter((b) => !q || matches(b.name + " " + b.items.map((i) => i.name).join(" "), q));
+    const favs = st.foods.filter((f) => (st.kind === "all" || f.kind === st.kind) && (!q || matches(f.name, q)));
+    return `${bundles.length ? `<div class="section-label">Gerichte</div>${bundles.map((b) => `
+        <div class="fd-bundle" role="button" tabindex="0" data-act="addBundle" data-id="${b.id}">
+          <span class="material-symbols-outlined">playlist_add</span>
+          <div class="fd-bundle-main"><div class="fd-row-name">${esc(b.name)}</div>
+            <div class="fd-sub">${bundleText(b)}</div></div>
+        </div>`).join("")}` : ""}
+      <div class="section-label">Favoriten</div>
+      <div class="tag-picker">${[["all", "Alle"], ["food", "Essen"], ["drink", "Getränke"]].map(([k, l]) => `<button class="tag-btn ${st.kind === k ? "active" : ""}" data-act="kind" data-kind="${k}">${l}</button>`).join("")}
+        <button class="tag-btn" data-act="cartSheetFree">+ Eigener Posten</button></div>
+      ${favs.length ? `<div class="fd-grid">${favs.map(tile).join("")}</div>` : `<div class="empty-state">${!st.loaded ? "Lädt…" : q ? "Nichts gefunden." : "Noch nichts im Katalog."}</div>`}`;
+  }
+
   function renderHeute() {
     const today = core.todayKey();
     const day = st.summary.find((d) => d.day === today) || { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, sugar_g: 0, caffeine_mg: 0 };
-    const favs = st.foods.filter((f) => st.kind === "all" || f.kind === st.kind);
     const todays = st.meals.filter((m) => core.dayKey(m.eaten_at) === today);
     $("fd-heute").innerHTML = `
       <div class="fd-sum">
@@ -224,16 +249,8 @@ function build(core, root) {
         </div>
         ${meter("sugar_g", Number(day.sugar_g) || 0)}${meter("caffeine_mg", Number(day.caffeine_mg) || 0)}
       </div>
-      ${st.bundles.length ? `<div class="section-label">Gerichte</div>${st.bundles.map((b) => `
-        <div class="fd-bundle" role="button" tabindex="0" data-act="addBundle" data-id="${b.id}">
-          <span class="material-symbols-outlined">playlist_add</span>
-          <div class="fd-bundle-main"><div class="fd-row-name">${esc(b.name)}</div>
-            <div class="fd-sub">${bundleText(b)}</div></div>
-        </div>`).join("")}` : ""}
-      <div class="section-label">Favoriten</div>
-      <div class="tag-picker">${[["all", "Alle"], ["food", "Essen"], ["drink", "Getränke"]].map(([k, l]) => `<button class="tag-btn ${st.kind === k ? "active" : ""}" data-act="kind" data-kind="${k}">${l}</button>`).join("")}
-        <button class="tag-btn" data-act="cartSheetFree">+ Eigener Posten</button></div>
-      ${favs.length ? `<div class="fd-grid">${favs.map(tile).join("")}</div>` : `<div class="empty-state">${st.loaded ? "Noch nichts im Katalog." : "Lädt…"}</div>`}
+      ${searchBox("heute")}
+      <div id="fdLists">${heuteLists()}</div>
       <div class="section-label">Heute gegessen</div>
       ${todays.length ? todays.map(mealCard).join("") : `<div class="empty-state">${st.loaded ? "Heute noch nichts eingetragen." : "Lädt…"}</div>`}`;
     renderCartBar();
@@ -280,13 +297,19 @@ function build(core, root) {
     const foodRow = (f) => row(f.name,
       `${isG(f) ? `${n0(f.kcal)} kcal / 100 ${unitOf(f)}${f.portion_g ? ` · ${esc(f.serving_label)} ${n0(f.portion_g)} ${unitOf(f)}` : ""}` : `${esc(f.serving_label)} · ${n0(f.kcal)} kcal`}${f.sugar_g ? ` · ${n1(f.sugar_g)} g Z` : ""}${f.caffeine_mg ? ` · ${n0(f.caffeine_mg)} mg K` : ""}`,
       f.source === "geschätzt" ? `<span class="tag-pill" title="Geschätzter Wert">~</span>` : "", "editFood", f.id);
-    const group = (kind) => st.foods.filter((f) => f.kind === kind).sort((a, b) => a.name.localeCompare(b.name, "de")).map(foodRow).join("") || `<div class="empty-state">Leer.</div>`;
+    st.katRows = { row, foodRow };
     $("fd-katalog").innerHTML = `
       <div class="fd-toolbar"><button class="btn-pill green" data-act="newFood">+ Neu</button><button class="btn-pill" data-act="newBundle">+ Gericht</button></div>
-      <div class="section-label">Essen</div>${group("food")}
+      ${searchBox("katalog")}<div id="fdCatLists">${katalogLists(row, foodRow)}</div>`;
+  }
+  function katalogLists(row, foodRow) {
+    const q = st.q.katalog;
+    const group = (kind) => st.foods.filter((f) => f.kind === kind && (!q || matches(f.name, q))).sort((a, b) => a.name.localeCompare(b.name, "de")).map(foodRow).join("") || `<div class="empty-state">${q ? "Nichts gefunden." : "Leer."}</div>`;
+    const bundles = st.bundles.filter((b) => !q || matches(b.name + " " + b.items.map((i) => i.name).join(" "), q));
+    return `<div class="section-label">Essen</div>${group("food")}
       <div class="section-label">Getränke</div>${group("drink")}
       <div class="section-label">Gerichte</div>
-      ${st.bundles.map((b) => row(b.name, bundleText(b), "", "editBundle", b.id)).join("") || `<div class="empty-state">Noch keine Gerichte.</div>`}`;
+      ${bundles.map((b) => row(b.name, bundleText(b), "", "editBundle", b.id)).join("") || `<div class="empty-state">${q ? "Nichts gefunden." : "Noch keine Gerichte."}</div>`}`;
   }
 
   function renderAll() { renderHeute(); renderVerlauf(); renderKatalog(); }
@@ -448,6 +471,13 @@ function build(core, root) {
     if (ctx === "edit") { it.qty = value / 100; if (f && f.kcal != null) it.kcal = f.kcal * it.qty; d.dirty = true; return openEditMeal(d.id); }
     d.name = val("fbName"); return openBundleSheet(d.id);
   }
+  function onSearch(e) {
+    const el = e.target.closest("[data-search]");
+    if (!el || !root.contains(el)) return;
+    st.q[el.dataset.search] = el.value;
+    if (el.dataset.search === "heute") $("fdLists").innerHTML = heuteLists();
+    else $("fdCatLists").innerHTML = katalogLists(st.katRows.row, st.katRows.foodRow);
+  }
   function onChange(e) {
     const el = e.target.closest("[data-amt]");
     if (el && root.contains(el)) setAmount(el.dataset.amt, el.dataset.key, num(el.value));
@@ -578,6 +608,7 @@ function build(core, root) {
   async function init() {
     root.addEventListener("click", onClick);
     root.addEventListener("change", onChange);
+    root.addEventListener("input", onSearch);
     $("fdTabs").addEventListener("click", onTab);
     renderAll();                 // sofort Gerüst zeigen, dann Daten laden
     await refresh();

@@ -29,7 +29,7 @@ Persönliche Tracking-App als PWA (iPhone-Homescreen): Arbeitszeiten, Gesundheit
 
 | Service | Adresse | Status |
 | --- | --- | --- |
-| App (Frontend) | `tracking.bensn.me` → `/var/www/tracking/` | ✅ live (v2.3.0) |
+| App (Frontend) | `tracking.bensn.me` → `/var/www/tracking/` | ✅ live (v2.4.0) |
 | bensn-api | Docker `bensn-api` :5001 (`/api/…`) | ✅ live |
 | health-api | Docker `bensn-health-api` :5008 (`/hapi/…`, intern `/api/…`) | ✅ live |
 | Alte Seiten | `worktracker.` / `health.` leiten `/` auf die App um; `/legacy/` = alter Habit-Tracker (Rückfall) | ✅ |
@@ -51,6 +51,7 @@ Persönliche Tracking-App als PWA (iPhone-Homescreen): Arbeitszeiten, Gesundheit
 - Kein Doppeltipp-Zoom (`touch-action: manipulation`), kein Text markieren außer in Eingabefeldern (`user-select: none`, damit Langdruck auf Buttons nicht markiert)
 - **Habits:** Button antippen = sofort buchen, **gedrückt halten** (oder Stift) = Sheet mit Menge, Uhrzeit, Notiz
 - **Wischen:** horizontal wischen wechselt den Tab (Heute/Verlauf/…); im Kalender wischt man Monate, auf den Einträgen darunter wieder Tabs
+- **Food, Suche:** Suchfeld im Katalog und bei den Favoriten (ohne Groß-/Kleinschreibung und Akzente, alle Wörter müssen vorkommen; Gerichte werden auch über ihre Zutaten gefunden)
 - **Food:** Lebensmittel mit Nährwerten pro 100 g/ml werden in Gramm erfasst (z.B. 200 g von einer 250-g-Packung, Schnellwahl ¼ ½ ¾ 1); gleiches gilt für Zutaten in Gerichten; "Eigener Posten" nimmt alle Nährwerte
 - **Health:** alle Medikamente lassen sich gemeinsam mit einer Uhrzeit eintragen; die Menge ist nur bei genau einem Bedarfsmedikament (PRN) änderbar, sonst gilt die übliche Menge des Medikaments
 
@@ -97,6 +98,7 @@ Entscheidung: die getrennten Tracker (Work, Health, Habits) und der neue Essens-
 | v2.1.0 | Habits nur Zähler + Gedrückthalten, Medikamente mit Einheiten, kein Doppeltipp-Zoom |
 | v2.2.0 | Medikamente bearbeiten, alle Medikamente gemeinsam eintragbar (Menge nur bei einzelnem PRN änderbar), kein Text markieren |
 | v2.3.0 | Wischgesten zwischen Sub-Tabs (Kalender: Monate), Food mit Gramm-Mengen (Nährwerte pro 100 g) und Gerichten aus Zutaten |
+| v2.4.0 | Food: Suche (Katalog und Favoriten), Salat-Klassiker aus echten Packungswerten, Back-Emmentaler-Einträge vereinheitlicht |
 
 Wichtige Erkenntnisse unterwegs: ein defekter Service Worker (`respondWith(undefined)`) legte Safari komplett lahm → immer echtes `Response`, `sw.js` öffentlich; UTC-vs-Wien-Datum in der health-api; Overlays an `<body>` verlieren das Modul-CSS; `user-select: none` darf Eingabefelder nicht treffen.
 
@@ -111,7 +113,7 @@ SORT file.name ASC
 Offen (Stand 2026-10-04):
 - Sport-Tracker
 - Kurzbefehle/Quick-Log-API mit eigenen eingeschränkten Tokens
-- Food: Namen der drei unbenannten Produkte prüfen (Saft, Dressing, Sriracha-Varianten), geschätzte Altwerte durch Packungswerte ersetzen, 30 Alt-Mahlzeiten nachtragen
+- Food: Namen der unbenannten Produkte prüfen (Saft, Dressing, Sriracha-Varianten), Schätzwerte im Salat-Klassiker (Gramm) anpassen, übrige Altwerte durch Packungswerte ersetzen, 30 Alt-Mahlzeiten nachtragen
 - Alt-Seiten (`worktracker/`, `health/`, `legacy/`) nach Bewährungszeit entfernen
 
 ## Notizen

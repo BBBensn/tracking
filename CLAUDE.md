@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Gesamt-App: Work, Health, Food, Habits — PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v2.3.0 (Gesamt-App live im Root; Wischgesten, Food mit Gramm-Mengen und Gerichten; alte Habit-Seite als Rückfall unter /legacy/)
+- **Version:** v2.4.0 (Gesamt-App live im Root; Food mit Suche, Gramm-Mengen und Gerichten; alte Habit-Seite als Rückfall unter /legacy/)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -223,6 +223,7 @@ gefahrlos testen: `ssh bensn 'bash -s up' < tracking/tools/testmode.sh` legt ein
 | v2.1.0 | Habits: Eintrag-Stift war kaputt (`_overlayVorratMode` fehlte) → neues Eintrag-Sheet mit Uhrzeit; Gedrückthalten eines Buttons öffnet es; Item-Editor auf Name/Einheit/Button-Liste reduziert (kein Vorrat, keine Verknüpfungen, keine Packungen/Presets); Health: Medikamente mit Wirkstoffmenge in mg/µg/g/IE bzw. mg/ml, µg/ml, IE/ml und üblicher Menge je Einnahme; app-weit kein Doppeltipp-Zoom (`touch-action: manipulation`) | ✅ deployed (2026-10-04) |
 | v2.2.0 | Health: Medikamenten-Profile bearbeitbar, alle Medikamente gemeinsam mit einer Uhrzeit eintragbar (Menge nur bei einem einzelnen PRN änderbar, sonst übliche Menge; Anzeige „14400 IE/ml × 5"); app-weit kein Text markieren außer in Eingabefeldern; Projekt-Doku `docs/Tracking.md` | ✅ deployed (2026-10-04) |
 | v2.3.0 | Wischen zwischen den Sub-Tabs (im Kalender: Monate wischen, darunter Tabs); Food: Nährwerte pro 100 g/ml mit Mengen in Gramm (z.B. 200 g von 250 g), Gerichte aus Zutaten in Gramm (ersetzen die Vorlagen), Basis-Katalog Gemüse/Obst, Eigener Posten mit allen Nährwerten (Fett, Eiweiß, Kohlenhydrate) | ✅ deployed (2026-10-04) |
+| v2.4.0 | Food: Suche im Katalog und bei den Favoriten (Heute; filtert auch Gerichte über ihre Zutaten) | ✅ deployed (2026-10-04) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 
