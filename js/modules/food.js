@@ -18,7 +18,7 @@ const LIMITS = {
     note: "EFSA: bis 400 mg/Tag für gesunde Erwachsene, höchstens 200 mg auf einmal" },
 };
 const MEAL_LABELS = ["Frühstück", "Mittag", "Abend", "Snack"];
-const SOURCES = [["geschätzt", "geschätzt"], ["packung", "Packung"], ["manuell", "manuell"]];
+const SOURCES = [["geschätzt", "geschätzt"], ["packung", "Packung"], ["manuell", "manuell"], ["offen", "offen"]];   // "offen" = Nährwerte fehlen noch
 
 const CSS = `.m-food {
   .fd-section { display: none; }
@@ -127,7 +127,7 @@ function build(core, root) {
   const $ = (id) => root.querySelector("#" + id);
 
   const st = {
-    tab: "heute", kind: "all", q: { heute: "", katalog: "" },   // Suchtexte je Tab
+    tab: "heute", kind: "all", q: { heute: "", katalog: "" }, open: false,   // Suchtexte je Tab; open = Katalog nur "Zu klären"
     foods: [], bundles: [], meals: [], summary: [],
     cart: new Map(), extra: [],      // Warenkorb: food_id -> qty, plus freie Posten
     draft: null,                     // Eingaben im offenen Sheet (Zeit/Label/Notiz/…)
@@ -146,6 +146,9 @@ function build(core, root) {
   const matches = (name, q) => { const n = norm(name); return norm(q).split(/\s+/).filter(Boolean).every((w) => n.includes(w)); };
   const searchBox = (key) => `<div class="input-row fd-search"><span class="material-symbols-outlined">search</span>
     <input type="search" data-search="${key}" placeholder="Suchen …" autocomplete="off" value="${esc(st.q[key])}"></div>`;
+  const kcalOf = (f, factor) => (f.kcal == null ? null : f.kcal * factor);   // null bleibt null (nicht 0)
+  const noValues = (f) => f.kcal == null;                              // Eintrag ohne Nährwerte (später nachtragen)
+  const needsCheck = (f) => noValues(f) || f.source === "geschätzt";   // "Zu klären": fehlende oder nur geschätzte Werte
   const foodMap = () => new Map(st.foods.map((f) => [f.id, f]));
   // Lebensmittel mit Basis g/ml: Menge in g/ml, Nährwerte pro 100. Sonst: Anzahl Portionen.
   const isG = (f) => !!f && !!f.basis && f.basis !== "portion";
@@ -197,7 +200,7 @@ function build(core, root) {
 
   function tile(f) {
     const q = st.cart.get(f.id) || 0;
-    const facts = [isG(f) ? `${n0(f.kcal)} kcal / 100 ${unitOf(f)}` : `${n0(f.kcal)} kcal`, f.sugar_g ? `${n1(f.sugar_g)} g Zucker` : "", f.caffeine_mg ? `${n0(f.caffeine_mg)} mg Koffein` : ""].filter(Boolean).join(" · ");
+    const facts = noValues(f) ? "Nährwerte fehlen" : [isG(f) ? `${n0(f.kcal)} kcal / 100 ${unitOf(f)}` : `${n0(f.kcal)} kcal`, f.sugar_g ? `${n1(f.sugar_g)} g Zucker` : "", f.caffeine_mg ? `${n0(f.caffeine_mg)} mg Koffein` : ""].filter(Boolean).join(" · ");
     return `<div class="fd-tile ${q ? "in-cart" : ""}" role="button" tabindex="0" data-act="add" data-id="${f.id}">
       <div class="fd-tile-name">${esc(f.name)}</div>
       <div class="fd-sub">${isG(f) && f.portion_g ? `${esc(f.serving_label)} · ${n0(f.portion_g)} ${unitOf(f)}` : isG(f) ? `pro 100 ${unitOf(f)}` : esc(f.serving_label)}</div>
@@ -209,7 +212,7 @@ function build(core, root) {
     const items = m.items || [];
     const total = sumKcal(items);
     const lines = items.length
-      ? items.map((i) => `<div class="fd-line"><span>${i.amount_unit ? `${n1(i.amount)} ${i.amount_unit} ` : Number(i.qty) !== 1 ? n1(i.qty) + "× " : ""}${esc(i.name)}</span><span class="fd-sub">${i.kcal != null ? n0(i.kcal) + " kcal" : "–"}</span></div>`).join("")
+      ? items.map((i) => `<div class="fd-line"><span>${i.amount_unit ? `${n1(i.amount)} ${i.amount_unit} ` : Number(i.qty) !== 1 ? n1(i.qty) + "× " : ""}${esc(i.name)}</span><span class="fd-sub">${i.kcal != null ? n0(i.kcal) + " kcal" : "Nährwerte fehlen"}</span></div>`).join("")
       : `<div class="fd-legacy">${esc(m.description || "")} · ohne Nährwerte</div>`;
     return `<div class="fd-card">
       <div class="fd-card-head"><span class="fd-time">${core.fmtClock(m.eaten_at)}</span>
@@ -234,13 +237,16 @@ function build(core, root) {
       <div class="section-label">Favoriten</div>
       <div class="tag-picker">${[["all", "Alle"], ["food", "Essen"], ["drink", "Getränke"]].map(([k, l]) => `<button class="tag-btn ${st.kind === k ? "active" : ""}" data-act="kind" data-kind="${k}">${l}</button>`).join("")}
         <button class="tag-btn" data-act="cartSheetFree">+ Eigener Posten</button></div>
-      ${favs.length ? `<div class="fd-grid">${favs.map(tile).join("")}</div>` : `<div class="empty-state">${!st.loaded ? "Lädt…" : q ? "Nichts gefunden." : "Noch nichts im Katalog."}</div>`}`;
+      ${favs.length ? `<div class="fd-grid">${favs.map(tile).join("")}</div>` : `<div class="empty-state">${!st.loaded ? "Lädt…" : q ? "Nichts gefunden." : "Noch nichts im Katalog."}</div>`}
+      ${q.trim() && st.loaded ? `<div class="fd-toolbar" style="margin-top:.7rem"><button class="btn-pill green" data-act="quickCreate">+ „${esc(q.trim())}" ohne Nährwerte anlegen</button></div>
+        <div class="fd-hint" style="margin-top:.4rem">Kommt in den Warenkorb; Nährwerte trägst du später im Katalog nach, die Mahlzeit wird dann automatisch ergänzt.</div>` : ""}`;
   }
 
   function renderHeute() {
     const today = core.todayKey();
     const day = st.summary.find((d) => d.day === today) || { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0, sugar_g: 0, caffeine_mg: 0 };
     const todays = st.meals.filter((m) => core.dayKey(m.eaten_at) === today);
+    const missing = todays.reduce((a, m) => a + (m.items || []).filter((i) => i.kcal == null).length, 0);
     $("fd-heute").innerHTML = `
       <div class="fd-sum">
         <div class="fd-sum-top">
@@ -248,6 +254,7 @@ function build(core, root) {
           <div class="fd-macros"><span><b>${n0(day.protein_g)}</b> g Eiweiß</span><span><b>${n0(day.carbs_g)}</b> g Kohlenhydrate</span><span><b>${n0(day.fat_g)}</b> g Fett</span></div>
         </div>
         ${meter("sugar_g", Number(day.sugar_g) || 0)}${meter("caffeine_mg", Number(day.caffeine_mg) || 0)}
+        ${missing ? `<div class="fd-hint" style="color:var(--orange)">${missing} Posten ohne Nährwerte — Tagessumme unvollständig, sie wird nach dem Nachtragen im Katalog automatisch ergänzt.</div>` : ""}
       </div>
       ${searchBox("heute")}
       <div id="fdLists">${heuteLists()}</div>
@@ -261,7 +268,8 @@ function build(core, root) {
     const count = st.cart.size + st.extra.length;
     bar.classList.toggle("visible", count > 0);
     if (!count) { bar.innerHTML = ""; return; }
-    bar.innerHTML = `<span class="fd-cart-sum"><b>${count}</b> Posten · <b>${n0(cartKcal())}</b> kcal</span>
+    const noVal = cartLines().filter((l) => noValues(l.food)).length;
+    bar.innerHTML = `<span class="fd-cart-sum"><b>${count}</b> Posten · <b>${n0(cartKcal())}</b> kcal${noVal ? ` · ${noVal} ohne Werte` : ""}</span>
       <button class="btn-icon" data-act="cartClear" aria-label="Leeren"><span class="material-symbols-outlined">close</span></button>
       <button class="btn-icon" data-act="cartSheet" aria-label="Zeit, Label, Notiz"><span class="material-symbols-outlined">tune</span></button>
       <button class="btn-pill green" data-act="cartLog">Eintragen</button>`;
@@ -295,17 +303,18 @@ function build(core, root) {
       <div class="fd-row-main"><div class="fd-row-name">${esc(name)}</div><div class="fd-sub">${sub}</div></div>
       ${right}<button class="btn-icon" data-act="${act}" data-id="${id}" aria-label="Bearbeiten"><span class="material-symbols-outlined">edit</span></button></div></div>`;
     const foodRow = (f) => row(f.name,
-      `${isG(f) ? `${n0(f.kcal)} kcal / 100 ${unitOf(f)}${f.portion_g ? ` · ${esc(f.serving_label)} ${n0(f.portion_g)} ${unitOf(f)}` : ""}` : `${esc(f.serving_label)} · ${n0(f.kcal)} kcal`}${f.sugar_g ? ` · ${n1(f.sugar_g)} g Z` : ""}${f.caffeine_mg ? ` · ${n0(f.caffeine_mg)} mg K` : ""}`,
-      f.source === "geschätzt" ? `<span class="tag-pill" title="Geschätzter Wert">~</span>` : "", "editFood", f.id);
+      noValues(f) ? `${esc(f.serving_label)} · Nährwerte fehlen` : `${isG(f) ? `${n0(f.kcal)} kcal / 100 ${unitOf(f)}${f.portion_g ? ` · ${esc(f.serving_label)} ${n0(f.portion_g)} ${unitOf(f)}` : ""}` : `${esc(f.serving_label)} · ${n0(f.kcal)} kcal`}${f.sugar_g ? ` · ${n1(f.sugar_g)} g Z` : ""}${f.caffeine_mg ? ` · ${n0(f.caffeine_mg)} mg K` : ""}`,
+      noValues(f) ? `<span class="tag-pill" title="Nährwerte fehlen">?</span>` : f.source === "geschätzt" ? `<span class="tag-pill" title="Geschätzter Wert">~</span>` : "", "editFood", f.id);
     st.katRows = { row, foodRow };
     $("fd-katalog").innerHTML = `
       <div class="fd-toolbar"><button class="btn-pill green" data-act="newFood">+ Neu</button><button class="btn-pill" data-act="newBundle">+ Gericht</button></div>
+      <div class="tag-picker" style="margin-top:.8rem">${[[false, "Alle"], [true, `Zu klären (${st.foods.filter(needsCheck).length})`]].map(([k, l]) => `<button class="tag-btn ${st.open === k ? "active" : ""}" data-act="openFilter" data-open="${k}">${l}</button>`).join("")}</div>
       ${searchBox("katalog")}<div id="fdCatLists">${katalogLists(row, foodRow)}</div>`;
   }
   function katalogLists(row, foodRow) {
     const q = st.q.katalog;
-    const group = (kind) => st.foods.filter((f) => f.kind === kind && (!q || matches(f.name, q))).sort((a, b) => a.name.localeCompare(b.name, "de")).map(foodRow).join("") || `<div class="empty-state">${q ? "Nichts gefunden." : "Leer."}</div>`;
-    const bundles = st.bundles.filter((b) => !q || matches(b.name + " " + b.items.map((i) => i.name).join(" "), q));
+    const group = (kind) => st.foods.filter((f) => f.kind === kind && (!q || matches(f.name, q)) && (!st.open || needsCheck(f))).sort((a, b) => a.name.localeCompare(b.name, "de")).map(foodRow).join("") || `<div class="empty-state">${q ? "Nichts gefunden." : "Leer."}</div>`;
+    const bundles = st.open ? [] : st.bundles.filter((b) => !q || matches(b.name + " " + b.items.map((i) => i.name).join(" "), q));
     return `<div class="section-label">Essen</div>${group("food")}
       <div class="section-label">Getränke</div>${group("drink")}
       <div class="section-label">Gerichte</div>
@@ -343,7 +352,7 @@ function build(core, root) {
   function openCartSheet(focusFree) {
     if (!st.draft || st.draft.type !== "cart") st.draft = { type: "cart", time: core.nowForDatetimeLocal(), label: "", note: "" };
     const d = st.draft;
-    const lines = cartLines().map((l) => `<div class="fd-eline"><div class="fd-eline-name">${esc(l.food.name)}<div class="fd-sub">${n0(l.food.kcal * factor(l.food, l.qty))} kcal</div></div>
+    const lines = cartLines().map((l) => `<div class="fd-eline"><div class="fd-eline-name">${esc(l.food.name)}<div class="fd-sub">${noValues(l.food) ? "Nährwerte fehlen" : n0(l.food.kcal * factor(l.food, l.qty)) + " kcal"}</div></div>
         ${qtyControl("cart", l.food.id, l.food, l.qty, "cStep")}<button class="btn-icon" data-act="cDel" data-id="${l.food.id}" aria-label="Entfernen"><span class="material-symbols-outlined">delete</span></button></div>`).join("")
       + st.extra.map((x, i) => `<div class="fd-eline"><div class="fd-eline-name">${esc(x.name)}<div class="fd-sub">${n0(x.kcal)} kcal${x.fat_g ? ` · ${n1(x.fat_g)} g Fett` : ""}${x.sugar_g ? ` · ${n1(x.sugar_g)} g Z` : ""}${x.caffeine_mg ? ` · ${n0(x.caffeine_mg)} mg K` : ""}</div></div>
         <button class="btn-icon" data-act="cDelExtra" data-i="${i}" aria-label="Entfernen"><span class="material-symbols-outlined">delete</span></button></div>`).join("");
@@ -404,6 +413,7 @@ function build(core, root) {
       <div class="input-row"><input id="ff_serving" placeholder="Portion, z.B. 1 Stück (~100 g)" value="${f ? esc(f.serving_label) : ""}"></div>
       <div id="ff_pg_row"><div class="fd-fl">Größe einer Packung / eines Stücks (optional, für ¼ ½ ¾ 1)</div><div class="input-row"><input id="ff_portion_g" inputmode="decimal" placeholder="z.B. 250" value="${f && f.portion_g != null ? esc(String(f.portion_g).replace(".", ",")) : ""}"><span class="input-unit" id="ff_pg_unit">g</span></div></div>
       <div class="sheet-label" id="ff_vals_label">Nährwerte pro Portion</div>
+      <div class="fd-hint" style="margin:-.2rem 0 .6rem">Leer lassen geht: du kannst Nährwerte später nachtragen, schon eingetragene Mahlzeiten werden dann automatisch ergänzt.</div>
       <div class="fd-grid2">${field("kcal", "Kalorien", "kcal")}${field("protein_g", "Eiweiß", "g")}${field("carbs_g", "Kohlenhydrate", "g")}${field("fat_g", "Fett", "g")}${field("sugar_g", "Zucker", "g")}${field("caffeine_mg", "Koffein", "mg")}</div>
       <div class="sheet-label">Quelle der Werte</div>
       <div class="tag-picker">${SOURCES.map(([k, l]) => `<button class="tag-btn ${st.draft.source === k ? "active" : ""}" data-act="pickSource" data-source="${k}">${l}</button>`).join("")}</div>
@@ -524,9 +534,9 @@ function build(core, root) {
         captureDraft();
         const ex = d.items.find((x) => x.food_id === f.id);
         if (isG(f)) {
-          if (ex) { ex.amount += 25; ex.qty = ex.amount / 100; ex.kcal = f.kcal * ex.qty; }
-          else { const a = defAmount(f); d.items.push({ food_id: f.id, name: f.name, qty: a / 100, amount: a, amount_unit: unitOf(f), kcal: f.kcal * a / 100 }); }
-        } else ex ? ((ex.qty += 1), (ex.kcal = f.kcal * ex.qty)) : d.items.push({ food_id: f.id, name: f.name, qty: 1, kcal: f.kcal });
+          if (ex) { ex.amount += 25; ex.qty = ex.amount / 100; ex.kcal = kcalOf(f, ex.qty); }
+          else { const a = defAmount(f); d.items.push({ food_id: f.id, name: f.name, qty: a / 100, amount: a, amount_unit: unitOf(f), kcal: kcalOf(f, a / 100) }); }
+        } else ex ? ((ex.qty += 1), (ex.kcal = kcalOf(f, ex.qty))) : d.items.push({ food_id: f.id, name: f.name, qty: 1, kcal: f.kcal });
         d.dirty = true; return openEditMeal(d.id);
       }
       case "eSave": return guard(async () => {
@@ -546,6 +556,18 @@ function build(core, root) {
         closeSheet(); await refresh();
       });
 
+      case "openFilter": st.open = el.dataset.open === "true"; return renderKatalog();
+      case "quickCreate": return guard(async () => {
+        const raw = st.q.heute.trim();
+        if (!raw) return;
+        const name = raw.charAt(0).toUpperCase() + raw.slice(1);
+        const created = await api("/api/foods", { method: "POST", body: { name, kind: st.kind === "drink" ? "drink" : "food", serving_label: "1 Portion", basis: "portion", source: "offen" } });
+        st.q.heute = "";
+        await loadAll();
+        st.cart.set(created.id, 1);
+        renderAll();
+        openCartSheet(false);          // direkt Zeit/Label wählbar (z.B. nachträglich 14:30)
+      });
       case "newFood": return openFoodSheet(null);
       case "editFood": return openFoodSheet(id);
       case "pickKind": d.kind = el.dataset.kind; el.parentElement.querySelectorAll(".tag-btn").forEach((b) => b.classList.toggle("active", b === el)); return;
@@ -557,7 +579,8 @@ function build(core, root) {
         const body = { name, kind: d.kind, serving_label: val("ff_serving").trim() || (d.basis === "portion" ? "1 Portion" : "Packung"), source: d.source,
           basis: d.basis, portion_g: d.basis === "portion" ? null : num(val("ff_portion_g")) };
         ["kcal", "protein_g", "carbs_g", "fat_g", "sugar_g", "caffeine_mg"].forEach((k) => (body[k] = num(val("ff_" + k))));
-        if (body.kcal == null) return core.showError("kcal angeben (Schätzung reicht).");
+        // Ohne kcal = Nährwerte fehlen noch ("offen"); mit Werten wird "offen" zu "manuell"
+        if (body.kcal == null) body.source = "offen"; else if (body.source === "offen") body.source = "manuell";
         await api(d.id ? "/api/foods/" + d.id : "/api/foods", { method: d.id ? "PATCH" : "POST", body });
         closeSheet(); await refresh();
       });
