@@ -87,13 +87,15 @@ export function createHistory(el, opts) {
       const cls = ["hx-cell", info ? "has" : "", day === today ? "today" : "", day === st.sel ? "sel" : ""].join(" ");
       cells += `<button class="${cls}" ${info ? `data-hx="day" data-day="${day}"` : "disabled"}><span>${d}</span><span class="hx-dots">${dots}</span></button>`;
     }
-    host.innerHTML = `<div class="hx-cal-nav">
+    // .hx-calwrap = Wisch-Zone für Monate (data-noswipe hält den globalen Tab-Wechsel aus app.js heraus);
+    // die Einträge darunter (.hx-daydetail) gehören wieder zum Tab-Wechsel
+    host.innerHTML = `<div class="hx-calwrap" data-noswipe><div class="hx-cal-nav">
         <button class="btn-icon" data-hx="nav" data-d="-1" ${mk <= lo ? "disabled" : ""} aria-label="Vorheriger Monat"><span class="material-symbols-outlined">chevron_left</span></button>
         <div class="hx-cal-title">${prettyMonth(mk)}</div>
         <button class="btn-icon" data-hx="nav" data-d="1" ${mk >= hi ? "disabled" : ""} aria-label="Nächster Monat"><span class="material-symbols-outlined">chevron_right</span></button>
       </div>
       <div class="hx-grid">${cells}</div>
-      <div class="hx-todaybar"><button class="btn-pill" data-hx="today">Heute</button></div>
+      <div class="hx-todaybar"><button class="btn-pill" data-hx="today">Heute</button></div></div>
       <div class="hx-daydetail"></div>`;
     const detail = host.querySelector(".hx-daydetail");
     if (st.sel && st.days.has(st.sel) && monthOf(st.sel) === mk) detail.append(dayBlock(st.sel));
@@ -136,6 +138,22 @@ export function createHistory(el, opts) {
   }
   el.addEventListener("click", onClick);
 
+  // Wischen auf dem Kalender: nach links = nächster Monat, nach rechts = voriger (wie die iOS-Kalender-App)
+  let swipe = null;
+  const onTouchStart = (e) => {
+    swipe = e.touches.length === 1 && e.target.closest(".hx-calwrap") ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+  };
+  const onTouchEnd = (e) => {
+    if (!swipe) return;
+    const c = e.changedTouches[0], dx = c.clientX - swipe.x, dy = c.clientY - swipe.y;
+    swipe = null;
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const btn = el.querySelector(`[data-hx=nav][data-d="${dx < 0 ? 1 : -1}"]`);
+    if (btn && !btn.disabled) btn.click();
+  };
+  el.addEventListener("touchstart", onTouchStart, { passive: true });
+  el.addEventListener("touchend", onTouchEnd, { passive: true });
+
   return {
     /** days: Map "YYYY-MM-DD" -> { count, marks } */
     setData(days) {
@@ -154,6 +172,6 @@ export function createHistory(el, opts) {
     setMessage(html) { st.message = html; render(); },
     /** Nach Änderungen an einem Tag (z.B. Bearbeiten) alles neu zeichnen, Zustand bleibt. */
     refresh() { render(); },
-    destroy() { el.removeEventListener("click", onClick); el.innerHTML = ""; el.classList.remove("hx"); },
+    destroy() { el.removeEventListener("click", onClick); el.removeEventListener("touchstart", onTouchStart); el.removeEventListener("touchend", onTouchEnd); el.innerHTML = ""; el.classList.remove("hx"); },
   };
 }

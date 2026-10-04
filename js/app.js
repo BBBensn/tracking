@@ -75,6 +75,35 @@ function routeFromHash() {
   return id || recall() || DEFAULT_MODULE;
 }
 
+/* ── Wischen zwischen den Sub-Tabs (Heute / Verlauf / …) des gemounteten Moduls ──
+   Nach links = nächster Tab, nach rechts = voriger. Ausgenommen: Eingabefelder, Sheets/Overlays, horizontal
+   scrollbare Bereiche (z.B. die Tab-Leiste selbst) und alles mit data-noswipe (Kalender: dort wischt man Monate). */
+const SWIPE_SKIP = 'input, textarea, select, [contenteditable], [data-noswipe], [class*="overlay"], [id*="overlay"]';
+function scrollsHorizontally(el) {
+  for (let n = el; n && n !== view; n = n.parentElement) {
+    if (n.scrollWidth > n.clientWidth + 1 && /(auto|scroll)/.test(getComputedStyle(n).overflowX)) return true;
+  }
+  return false;
+}
+let swipe = null;
+view.addEventListener("touchstart", (e) => {
+  swipe = null;
+  if (e.touches.length !== 1 || e.target.closest(SWIPE_SKIP) || scrollsHorizontally(e.target)) return;
+  swipe = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+}, { passive: true });
+view.addEventListener("touchend", (e) => {
+  if (!swipe) return;
+  const c = e.changedTouches[0], dx = c.clientX - swipe.x, dy = c.clientY - swipe.y;
+  swipe = null;
+  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const tabs = [...view.querySelectorAll(".subnav .tabs .tab")];
+  const next = tabs[tabs.findIndex((t) => t.classList.contains("active")) + (dx < 0 ? 1 : -1)];
+  if (next) {
+    next.click();
+    next.scrollIntoView({ inline: "center", block: "nearest" });
+  }
+}, { passive: true });
+
 renderTabbar();
 window.addEventListener("hashchange", () => navigate(routeFromHash()));
 navigate(routeFromHash());

@@ -29,7 +29,7 @@ Persönliche Tracking-App als PWA (iPhone-Homescreen): Arbeitszeiten, Gesundheit
 
 | Service | Adresse | Status |
 | --- | --- | --- |
-| App (Frontend) | `tracking.bensn.me` → `/var/www/tracking/` | ✅ live (v2.2.0) |
+| App (Frontend) | `tracking.bensn.me` → `/var/www/tracking/` | ✅ live (v2.3.0) |
 | bensn-api | Docker `bensn-api` :5001 (`/api/…`) | ✅ live |
 | health-api | Docker `bensn-health-api` :5008 (`/hapi/…`, intern `/api/…`) | ✅ live |
 | Alte Seiten | `worktracker.` / `health.` leiten `/` auf die App um; `/legacy/` = alter Habit-Tracker (Rückfall) | ✅ |
@@ -50,12 +50,14 @@ Persönliche Tracking-App als PWA (iPhone-Homescreen): Arbeitszeiten, Gesundheit
 - **Verlauf** überall gleich (`js/history.js`): Monate einklappbar (aktueller offen), Umschalter Liste/Kalender (Tagesmarker, Tipp auf Tag zeigt Einträge)
 - Kein Doppeltipp-Zoom (`touch-action: manipulation`), kein Text markieren außer in Eingabefeldern (`user-select: none`, damit Langdruck auf Buttons nicht markiert)
 - **Habits:** Button antippen = sofort buchen, **gedrückt halten** (oder Stift) = Sheet mit Menge, Uhrzeit, Notiz
+- **Wischen:** horizontal wischen wechselt den Tab (Heute/Verlauf/…); im Kalender wischt man Monate, auf den Einträgen darunter wieder Tabs
+- **Food:** Lebensmittel mit Nährwerten pro 100 g/ml werden in Gramm erfasst (z.B. 200 g von einer 250-g-Packung, Schnellwahl ¼ ½ ¾ 1); gleiches gilt für Zutaten in Gerichten; "Eigener Posten" nimmt alle Nährwerte
 - **Health:** alle Medikamente lassen sich gemeinsam mit einer Uhrzeit eintragen; die Menge ist nur bei genau einem Bedarfsmedikament (PRN) änderbar, sonst gilt die übliche Menge des Medikaments
 
 ## Datenmodelle (Kurzfassung)
 
 - **Habits:** `tracking_categories` → `tracking_items` (Name, Einheit, Buttons als JSON) → `tracking_entries` (nur `zaehler`; alte Vorrat-Typen bleiben lesbar). Verknüpfte Buchungen, Vorrat und Packungen gibt es seit v2.1.0 nicht mehr
-- **Food:** Katalog `health_foods` (Werte je Portion) → Mahlzeit `health_meals` → Zeilen `health_meal_items` (Snapshot der Nährwerte); Vorlagen (Bundles) klappen in Zeilen auf. Richtwerte Zucker 50/25 g (WHO), Koffein 400 mg (EFSA) stehen in `food.js`
+- **Food:** Katalog `health_foods` (Werte je Portion oder je 100 g/ml, `basis`/`portion_g`) → Mahlzeit `health_meals` → Zeilen `health_meal_items` (Snapshot der Nährwerte); Vorlagen (Bundles) klappen in Zeilen auf. Richtwerte Zucker 50/25 g (WHO), Koffein 400 mg (EFSA) stehen in `food.js`
 - **Medikamente:** Profil `health_medications` (Name, Form `tablet`/`drops`, Wirkstoffmenge `dose_mg` in `dose_unit` [mg, µg, g, IE, mg/ml, µg/ml, IE/ml], übliche Menge `default_count`, PRN, gültig von/bis) → Einnahmen `health_medication_logs` (`count` = Tabletten oder Tropfen)
 - Zeitzone: gespeichert UTC, Tageslogik immer `Europe/Vienna`
 
@@ -94,6 +96,7 @@ Entscheidung: die getrennten Tracker (Work, Health, Habits) und der neue Essens-
 | **v2.0.0** | **Cutover:** App im Root, alte Vhosts leiten um, neuer Service Worker, einheitlicher Verlauf mit Kalender, Work-Tab Eingabe, Medikamente in Tropfen |
 | v2.1.0 | Habits nur Zähler + Gedrückthalten, Medikamente mit Einheiten, kein Doppeltipp-Zoom |
 | v2.2.0 | Medikamente bearbeiten, alle Medikamente gemeinsam eintragbar (Menge nur bei einzelnem PRN änderbar), kein Text markieren |
+| v2.3.0 | Wischgesten zwischen Sub-Tabs (Kalender: Monate), Food mit Gramm-Mengen (Nährwerte pro 100 g) und Gerichten aus Zutaten |
 
 Wichtige Erkenntnisse unterwegs: ein defekter Service Worker (`respondWith(undefined)`) legte Safari komplett lahm → immer echtes `Response`, `sw.js` öffentlich; UTC-vs-Wien-Datum in der health-api; Overlays an `<body>` verlieren das Modul-CSS; `user-select: none` darf Eingabefelder nicht treffen.
 
@@ -107,9 +110,8 @@ SORT file.name ASC
 
 Offen (Stand 2026-10-04):
 - Sport-Tracker
-- Wisch-Gesten zwischen den Sub-Tabs
 - Kurzbefehle/Quick-Log-API mit eigenen eingeschränkten Tokens
-- Food: Katalogwerte prüfen, 30 Alt-Mahlzeiten nachtragen, Zutaten-basierte Gerichte (Gramm, Gemüse/Obst-Katalog, Packungswerte scannen)
+- Food: Packungswerte aus den Nährwerttabellen-Fotos in den Katalog übernehmen, Katalogwerte prüfen, 30 Alt-Mahlzeiten nachtragen
 - Alt-Seiten (`worktracker/`, `health/`, `legacy/`) nach Bewährungszeit entfernen
 
 ## Notizen

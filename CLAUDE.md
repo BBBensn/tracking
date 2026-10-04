@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Gesamt-App: Work, Health, Food, Habits — PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v2.2.0 (Gesamt-App live im Root; Medikamente bearbeitbar, kein Text markieren; alte Habit-Seite als Rückfall unter /legacy/)
+- **Version:** v2.3.0 (Gesamt-App live im Root; Wischgesten, Food mit Gramm-Mengen und Gerichten; alte Habit-Seite als Rückfall unter /legacy/)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -156,6 +156,8 @@ Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammeng
   Kopien; `core.esc()` für alles, was Nutzertext enthält
 - **Interaktion app-weit** (`css/app.css`): `touch-action: manipulation` (kein Doppeltipp-Zoom) und `user-select: none` + `-webkit-touch-callout: none` auf `html, body`; `input, textarea, [contenteditable]` setzen `user-select: text` ausdrücklich zurück (auf iOS sind Eingabefelder mit `none` sonst nicht bedienbar). Neue Elemente mit Langdruck-Funktion brauchen nichts Eigenes
 - **Verlauf** (`js/history.js`) ist für ALLE Tracker gleich: ein Modul liefert nur `setData(Map tag → {count, marks})` und `renderDay(tag) → {extra?, body: String|Node|Node[]}`; Monatsköpfe, Tagesköpfe, Liste/Kalender-Umschalter und das Merken der Ansicht (`localStorage bensn.hx.<key>`) macht die Komponente. Klicks innerhalb der Tagesinhalte bleiben im Modul. `renderDay` darf keine beim Erzeugen eingefrorene Datenstruktur nutzen (immer Variablen im Modul-Scope lesen, die bei jedem Laden neu gesetzt werden)
+- **Wischgesten** (`js/app.js`): horizontal wischen wechselt den Sub-Tab des Moduls (links = nächster). Ausgenommen: Eingabefelder, Overlays/Sheets, horizontal scrollbare Bereiche und alles mit `data-noswipe`. Der Kalender (`history.js`, `.hx-calwrap`) trägt `data-noswipe` und wischt selbst die Monate; die Einträge darunter wechseln wieder die Tabs
+- **Food mit Mengen:** `health_foods.basis` = `portion` (Werte je Portion, Menge = Portionen) | `g` | `ml` (Werte je 100 g/ml, Menge in g/ml, `qty = Menge/100`). Warenkorb-Map `food_id → n` bedeutet je nach Basis Gramm oder Portionen (Helfer `isG/factor/stepFood` in `food.js`); Mengenfeld je Zeile über `qtyControl()` (Eingabe + ¼ ½ ¾ 1 einer Packung, falls `portion_g`). Gerichte (Bundles) speichern Zutaten mit `amount`. Packungswerte kommen per Foto-Auswertung durch Claude in den Katalog (kein OCR in der App)
 - **Food** (neu geschrieben, kein Konverter-Port): Delegation über `data-act`, Sheets werden
   dynamisch in `#fdSheets` gerendert. Eingaben im offenen Sheet vor jedem Neu-Rendern in
   `st.draft` sichern (`captureDraft`). Doppel-Tap-Schutz über `guard()`. Richtwerte (Zucker 50 g/
@@ -220,6 +222,7 @@ gefahrlos testen: `ssh bensn 'bash -s up' < tracking/tools/testmode.sh` legt ein
 | v2.0.0 | **Cutover:** Gesamt-App im Root von tracking.bensn.me (Work, Health, Food, Habits), alte Vhosts worktracker./health. leiten um (APIs bleiben), neuer Service Worker, einheitlicher Verlauf mit Kalenderansicht in allen Trackern, Work-Tab Eingabe, Medikamente in Tropfen, Food-Sheet-Layout | ✅ deployed (2026-10-04) |
 | v2.1.0 | Habits: Eintrag-Stift war kaputt (`_overlayVorratMode` fehlte) → neues Eintrag-Sheet mit Uhrzeit; Gedrückthalten eines Buttons öffnet es; Item-Editor auf Name/Einheit/Button-Liste reduziert (kein Vorrat, keine Verknüpfungen, keine Packungen/Presets); Health: Medikamente mit Wirkstoffmenge in mg/µg/g/IE bzw. mg/ml, µg/ml, IE/ml und üblicher Menge je Einnahme; app-weit kein Doppeltipp-Zoom (`touch-action: manipulation`) | ✅ deployed (2026-10-04) |
 | v2.2.0 | Health: Medikamenten-Profile bearbeitbar, alle Medikamente gemeinsam mit einer Uhrzeit eintragbar (Menge nur bei einem einzelnen PRN änderbar, sonst übliche Menge; Anzeige „14400 IE/ml × 5"); app-weit kein Text markieren außer in Eingabefeldern; Projekt-Doku `docs/Tracking.md` | ✅ deployed (2026-10-04) |
+| v2.3.0 | Wischen zwischen den Sub-Tabs (im Kalender: Monate wischen, darunter Tabs); Food: Nährwerte pro 100 g/ml mit Mengen in Gramm (z.B. 200 g von 250 g), Gerichte aus Zutaten in Gramm (ersetzen die Vorlagen), Basis-Katalog Gemüse/Obst, Eigener Posten mit allen Nährwerten (Fett, Eiweiß, Kohlenhydrate) | ✅ deployed (2026-10-04) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 
