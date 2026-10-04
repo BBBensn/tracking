@@ -299,7 +299,7 @@ const TEMPLATE = `<div class="subnav"><div class="tabs">
     <!-- ═══ SHEET: NEUES MEDIKAMENT ═══ -->
     <div class="overlay" id="sheetMedCreate" onclick="if(event.target===this) HL.closeSheet('medCreate')">
       <div class="overlay-sheet">
-        <div class="sheet-title">Neues Medikament</div>
+        <div class="sheet-title" id="newMedTitle">Neues Medikament</div>
         <div class="input-row"><input type="text" id="newMedName" placeholder="Name" style="font-size: 1rem" /></div>
         <div class="sheet-label">Einnahme-Form</div>
         <div class="tag-picker" id="newMedUnitPicker">
@@ -520,22 +520,21 @@ function build(core) {
         const perDrop = isDrops(m) && !u.endsWith("/ml");
         return `${parseFloat(m.dose_mg)} ${u}${perDrop ? "/Tropfen" : ""}`;
       }
+      // Mit üblicher Menge: "20000 IE/ml × 5" (Tropfen immer, Tabletten ab 2)
+      function doseQtyLabel(m) {
+        const n = m.default_count || 1;
+        const base = doseLabel(m);
+        return isDrops(m) || n > 1 ? [base, `× ${n}`].filter(Boolean).join(" ") : base;
+      }
       let _medConfirmFor = null;   // für welches Medikament die Bestätigungsleiste zuletzt vorbelegt wurde
       function toggleMedSelect(medId) {
-        if (_selectedMedIds.has(medId)) {
-          _selectedMedIds.delete(medId);
-        } else {
-          // Tropfen haben eine eigene Mengenangabe und werden deshalb immer einzeln bestätigt —
-          // sonst wäre unklar, auf welches der gleichzeitig gewählten Medikamente sie sich beziehen
-          const anyDrops = [..._selectedMedIds].some((id) => isDrops(medById(id)));
-          if (isDrops(medById(medId)) || anyDrops) _selectedMedIds.clear();
-          _selectedMedIds.add(medId);
-        }
+        if (_selectedMedIds.has(medId)) _selectedMedIds.delete(medId);
+        else _selectedMedIds.add(medId);
         renderMedChecklistDOM();
       }
-      // Anzahl-Stepper ("2x Ritalin auf einmal") nur sinnvoll, wenn genau EIN
-      // Bedarfsmedikament ausgewählt ist — bei mehreren gleichzeitig ausgewählten
-      // (v.a. gemischt mit täglichen) wäre unklar, auf welches sich die Anzahl bezieht.
+      // Die Menge ist nur bei EINEM ausgewählten Bedarfsmedikament (PRN) änderbar (Stepper bei Tabletten,
+      // Eingabe bei Tropfen) — bei mehreren oder bei täglichen Medikamenten gilt immer die übliche Menge
+      // (`default_count`), damit sich alles auf einmal mit derselben Uhrzeit eintragen lässt.
       function renderMedConfirmBar() {
         const bar = document.getElementById("medConfirmBar");
         const timeInput = document.getElementById("medConfirmTime");
@@ -545,7 +544,7 @@ function build(core) {
           if (!timeInput.value) timeInput.value = nowForDatetimeLocal();
           const onlyId = _selectedMedIds.size === 1 ? Array.from(_selectedMedIds)[0] : null;
           const onlyMed = onlyId ? _lastActiveMeds.find((m) => m.id === onlyId) : null;
-          if (onlyMed && (onlyMed.is_prn || isDrops(onlyMed))) {
+          if (onlyMed && onlyMed.is_prn) {
             countRow.style.display = "flex";
             const drops = isDrops(onlyMed);
             document.getElementById("medConfirmStepper").style.display = drops ? "none" : "flex";
@@ -584,35 +583,36 @@ function build(core) {
         const iso = toIsoOrNull(document.getElementById("medConfirmTime").value);
         const ids = Array.from(_selectedMedIds);
         const only = ids.length === 1 ? medById(ids[0]) : null;
-        // Menge je Medikament: Tropfen aus dem Eingabefeld, einzelnes Bedarfsmedikament aus dem Stepper,
-        // sonst die übliche Menge des Medikaments (Standard 1)
         const countFor = (id) => {
-          const m = medById(id);
-          if (only && isDrops(only)) return parseInt(document.getElementById("medConfirmDrops").value);
-          if (only && only.is_prn) return _medConfirmCount;
-          return (m && m.default_count) || 1;
+          if (only && only.is_prn) return isDrops(only) ? parseInt(document.getElementById("medConfirmDrops").value) : _medConfirmCount;
+          return (medById(id) && medById(id).default_count) || 1;
         };
-        if (only && isDrops(only)) {
-          const n = countFor(only.id);
-          if (!n || n < 1) return alert("Anzahl Tropfen angeben");
-        }
+        if (only && only.is_prn && isDrops(only) && !(countFor(only.id) >= 1)) return alert("Anzahl Tropfen angeben");
         await Promise.all(ids.map((id) => apiFetch("/api/medication-log", "POST", { medication_id: id, taken_at: iso, count: countFor(id) })));
         _medConfirmFor = null;
         _medConfirmCount = 1;
+        _selectedMedIds.clear();
         await loadMedChecklist();
       }
 
-      // Neues Medikamenten-Profil anlegen
-      function openMedCreateSheet() {
-        document.getElementById("newMedName").value = "";
-        document.getElementById("newMedDose").value = "";
-        document.getElementById("newMedCount").value = 1;
-        document.getElementById("newMedValidFrom").value = todayKey();
-        document.getElementById("newMedValidTo").value = "";
-        document.getElementById("newMedNotes").value = "";
-        _newMedPrn = false;
-        document.getElementById("newMedPrnToggle").classList.remove("active");
-        setNewMedUnit("tablet", document.querySelector('#newMedUnitPicker [data-unit="tablet"]'));
+      // Medikamenten-Profil anlegen (ohne id) oder bearbeiten (mit id: Felder vorbelegt, Speichern = PATCH)
+      let _editMedId = null;
+      let _medProfiles = {};   // id -> Profil, für das Vorbelegen beim Bearbeiten
+      function openMedCreateSheet(id) {
+        const m = id ? _medProfiles[id] : null;
+        _editMedId = m ? m.id : null;
+        document.getElementById("newMedTitle").textContent = m ? "Medikament bearbeiten" : "Neues Medikament";
+        document.getElementById("newMedName").value = m ? m.name : "";
+        document.getElementById("newMedDose").value = m && m.dose_mg != null ? parseFloat(m.dose_mg) : "";
+        document.getElementById("newMedCount").value = m ? m.default_count || 1 : 1;
+        document.getElementById("newMedValidFrom").value = m ? m.valid_from : todayKey();
+        document.getElementById("newMedValidTo").value = m && m.valid_to ? m.valid_to : "";
+        document.getElementById("newMedNotes").value = m && m.notes ? m.notes : "";
+        _newMedPrn = !!(m && m.is_prn);
+        document.getElementById("newMedPrnToggle").classList.toggle("active", _newMedPrn);
+        const unit = m ? m.unit || "tablet" : "tablet";
+        setNewMedUnit(unit, document.querySelector(`#newMedUnitPicker [data-unit="${unit}"]`));
+        if (m && m.dose_unit) setNewMedDoseUnit(m.dose_unit);
         openSheet("medCreate");
       }
       function setNewMedUnit(unit, btn) {
@@ -637,7 +637,7 @@ function build(core) {
       async function saveNewMed() {
         const name = document.getElementById("newMedName").value.trim();
         if (!name) return alert("Name angeben");
-        await apiFetch("/api/medications", "POST", {
+        const payload = {
           name,
           dose_mg: parseFloat(document.getElementById("newMedDose").value) || null,
           dose_unit: _newMedDoseUnit,
@@ -647,8 +647,11 @@ function build(core) {
           valid_from: document.getElementById("newMedValidFrom").value || null,
           valid_to: document.getElementById("newMedValidTo").value || null,
           notes: document.getElementById("newMedNotes").value || null,
-        });
+        };
+        if (_editMedId) await apiFetch(`/api/medications/${_editMedId}`, "PATCH", payload);
+        else await apiFetch("/api/medications", "POST", payload);
         closeSheet("medCreate");
+        _editMedId = null;
         loadMedChecklist();
         loadMedProfiles();
       }
@@ -756,7 +759,6 @@ function build(core) {
         // genommen) — nur tägliche Medikamente zeigen den erledigt-Status persistent.
         const showDone = a && a.taken_today && !m.is_prn;
         const isSelected = _selectedMedIds.has(m.id);
-        const doseText = doseLabel(m);
         const countLabel = a && a.taken_count_today
           ? `${a.taken_count_today}${isDrops(m) ? " Tropfen" : "×"} heute${a.last_taken_at ? " · zuletzt " + fmtTime(a.last_taken_at) : ""}`
           : "";
@@ -768,7 +770,7 @@ function build(core) {
             <div class="med-check-box">${showDone ? "✓" : isSelected ? "●" : ""}</div>
             <div class="med-check-main">
               <div class="med-check-name">${m.name}${m.is_prn ? ' <span class="pill prn">PRN</span>' : ""}</div>
-              <div class="med-check-sub">${[doseText, countLabel].filter(Boolean).join(" · ")}</div>
+              <div class="med-check-sub">${[doseQtyLabel(m), countLabel].filter(Boolean).join(" · ")}</div>
               ${editTimeBtn}
             </div>
           </div>`;
@@ -785,6 +787,7 @@ function build(core) {
           historyEl.innerHTML = "";
           return;
         }
+        _medProfiles = Object.fromEntries(meds.map((m) => [m.id, m]));
         const active = meds.filter((m) => m.active);
         const history = meds.filter((m) => !m.active);
 
@@ -807,11 +810,12 @@ function build(core) {
                 ${m.unit === "drops" ? '<span class="pill">Tropfen</span>' : ""}
                 ${isActive ? '<span class="pill active">Aktiv</span>' : ""}
               </div>
-              <div class="med-profile-dose">${doseLabel(m)}</div>
+              <div class="med-profile-dose">${doseQtyLabel(m)}</div>
             </div>
-            <div class="med-profile-period">${period}${(m.default_count || 1) > 1 ? ` · üblich ${m.default_count} ${m.unit === "drops" ? "Tropfen" : "Tabletten"}` : ""}</div>
+            <div class="med-profile-period">${period}</div>
             ${m.notes ? `<div class="med-profile-notes">${m.notes}</div>` : ""}
             <div style="display:flex;gap:1rem;margin-top:4px">
+              <button class="btn-pill" onclick="HL.openMedCreateSheet('${m.id}')">Bearbeiten</button>
               ${isActive ? `<button class="btn-pill" onclick="HL.endMedication('${m.id}')">Beenden</button>` : ""}
               <button class="btn-pill red" onclick="HL.deleteMedication('${m.id}','${m.name.replace(/'/g, "\\'")}')">Löschen</button>
             </div>

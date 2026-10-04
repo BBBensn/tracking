@@ -17,6 +17,18 @@ body { overscroll-behavior: none; }
    alle Elemente, weil Doppeltipps auch auf Buttons/Text/Eingabefeldern passieren, nicht nur auf dem Hintergrund */
 * { touch-action: manipulation; }
 
+/* Kein Text markieren und kein iOS-Callout (Kopieren/Nachschlagen) beim Gedrückthalten — Buttons haben
+   Langdruck-Funktionen. Nur in Eingabefeldern bleibt Markieren möglich (dort ist es auf iOS sogar nötig:
+   mit user-select:none wären sie nicht bedienbar, deshalb ausdrücklich zurück auf text). */
+html, body {
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text; user-select: text;
+  -webkit-touch-callout: default;
+}
+
 /* ── Inhalt ── */
 /* Bewusst KEIN z-index: sonst entsteht ein Stacking-Context, und die Sheets der Module
    (z-index 100) würden unter die Tab-Leiste (z-index 50) rutschen statt sie zu überdecken. */

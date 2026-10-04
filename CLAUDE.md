@@ -9,7 +9,7 @@ Ablageort: `~/Documents/Coding/bensn-hub/tracking/CLAUDE.md`
 
 - **Name:** tracking (Gesamt-App: Work, Health, Food, Habits — PWA)
 - **Domain:** `tracking.bensn.me`
-- **Version:** v2.1.0 (Gesamt-App live im Root; Habits reine Zähler-Logik mit Gedrückthalten-Eintrag; alte Habit-Seite als Rückfall unter /legacy/)
+- **Version:** v2.2.0 (Gesamt-App live im Root; Medikamente bearbeitbar, kein Text markieren; alte Habit-Seite als Rückfall unter /legacy/)
 - **Status:** active
 - **Stack:** Vanilla JS (PWA), kein Build-Schritt. Backend ist die geteilte hub-api (siehe `bensn-meta`-Repo, Port 5001) — dieses Repo enthält nur das Frontend.
 
@@ -154,6 +154,7 @@ Services (bensn-api :5001, health-api :5008) — nur das Frontend wird zusammeng
   Formularfelder (`.input-row`, `.note-input`), Tags (`.tag-btn`), `.btn-icon`, `.day-header`,
   `.tag-pill`, `.empty-state`, `.section-label`, Sub-Nav-Tabs. Neue Module nutzen diese statt eigener
   Kopien; `core.esc()` für alles, was Nutzertext enthält
+- **Interaktion app-weit** (`css/app.css`): `touch-action: manipulation` (kein Doppeltipp-Zoom) und `user-select: none` + `-webkit-touch-callout: none` auf `html, body`; `input, textarea, [contenteditable]` setzen `user-select: text` ausdrücklich zurück (auf iOS sind Eingabefelder mit `none` sonst nicht bedienbar). Neue Elemente mit Langdruck-Funktion brauchen nichts Eigenes
 - **Verlauf** (`js/history.js`) ist für ALLE Tracker gleich: ein Modul liefert nur `setData(Map tag → {count, marks})` und `renderDay(tag) → {extra?, body: String|Node|Node[]}`; Monatsköpfe, Tagesköpfe, Liste/Kalender-Umschalter und das Merken der Ansicht (`localStorage bensn.hx.<key>`) macht die Komponente. Klicks innerhalb der Tagesinhalte bleiben im Modul. `renderDay` darf keine beim Erzeugen eingefrorene Datenstruktur nutzen (immer Variablen im Modul-Scope lesen, die bei jedem Laden neu gesetzt werden)
 - **Food** (neu geschrieben, kein Konverter-Port): Delegation über `data-act`, Sheets werden
   dynamisch in `#fdSheets` gerendert. Eingaben im offenen Sheet vor jedem Neu-Rendern in
@@ -218,12 +219,16 @@ gefahrlos testen: `ssh bensn 'bash -s up' < tracking/tools/testmode.sh` legt ein
 | v1.11.0 | Gesamt-App-Vorschau: Mahlzeiten aus dem Health-Modul entfernt (Heute-Button, Verlauf, Dashboard-Kachel, Bearbeiten) — Food/Getränke nur noch in Food; Habits lädt mit 3 statt 104 Requests (`/api/smoke-breaks`, ~0,3 s); Arbeits-Zigaretten stehen je Pause chronologisch im Habits-Verlauf; Habits-Bearbeiten-Sheet war ungestylt (Overlay hing an `<body>` außerhalb des Modul-CSS), Work-Overlays ebenfalls in den Modul-Container verlegt | ✅ deployed (2026-10-04) |
 | v2.0.0 | **Cutover:** Gesamt-App im Root von tracking.bensn.me (Work, Health, Food, Habits), alte Vhosts worktracker./health. leiten um (APIs bleiben), neuer Service Worker, einheitlicher Verlauf mit Kalenderansicht in allen Trackern, Work-Tab Eingabe, Medikamente in Tropfen, Food-Sheet-Layout | ✅ deployed (2026-10-04) |
 | v2.1.0 | Habits: Eintrag-Stift war kaputt (`_overlayVorratMode` fehlte) → neues Eintrag-Sheet mit Uhrzeit; Gedrückthalten eines Buttons öffnet es; Item-Editor auf Name/Einheit/Button-Liste reduziert (kein Vorrat, keine Verknüpfungen, keine Packungen/Presets); Health: Medikamente mit Wirkstoffmenge in mg/µg/g/IE bzw. mg/ml, µg/ml, IE/ml und üblicher Menge je Einnahme; app-weit kein Doppeltipp-Zoom (`touch-action: manipulation`) | ✅ deployed (2026-10-04) |
+| v2.2.0 | Health: Medikamenten-Profile bearbeitbar, alle Medikamente gemeinsam mit einer Uhrzeit eintragbar (Menge nur bei einem einzelnen PRN änderbar, sonst übliche Menge; Anzeige „14400 IE/ml × 5"); app-weit kein Text markieren außer in Eingabefeldern; Projekt-Doku `docs/Tracking.md` | ✅ deployed (2026-10-04) |
 
 Details zur vollständigen Versionshistorie: `docs/changelogs/CHANGELOG.md`.
 
 ---
 
-## Obsidian-Doku
+## Projekt-Doku
 
-- Projekt-MD: `03_Projects/Coding PC/Bensn-Hub/Tracking/Tracking.md`
-- Changelogs: `03_Projects/Coding PC/Bensn-Hub/Tracking/Changelogs/`
+- Projekt-MD: `docs/Tracking.md` (lokal im Repo, enthält auch den Umbau-Verlauf) — Claude Code pflegt sie nach jeder Version
+  (Module, Bedienung, Datenmodelle, Betrieb, Umbau-Tabelle, offene Todos). Der Nutzer kopiert sie bei Bedarf in den Vault;
+  Claude schreibt NIE direkt in den Vault
+- Vault-Ziel: `03_Projects/Coding PC/Bensn-Hub/Tracking/Tracking.md`, Changelogs: `…/Tracking/Changelogs/`
+- Changelogs bleiben je Repo und Version eine Datei (der Vault bindet sie per Dataview ordnerweise ein)
