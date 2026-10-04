@@ -111,7 +111,7 @@ SORT file.name ASC
 Offen (Stand 2026-10-04):
 - Sport-Tracker
 - Kurzbefehle/Quick-Log-API mit eigenen eingeschränkten Tokens
-- Food: Packungswerte aus den Nährwerttabellen-Fotos in den Katalog übernehmen, Katalogwerte prüfen, 30 Alt-Mahlzeiten nachtragen
+- Food: Namen der drei unbenannten Produkte prüfen (Saft, Dressing, Sriracha-Varianten), geschätzte Altwerte durch Packungswerte ersetzen, 30 Alt-Mahlzeiten nachtragen
 - Alt-Seiten (`worktracker/`, `health/`, `legacy/`) nach Bewährungszeit entfernen
 
 ## Notizen

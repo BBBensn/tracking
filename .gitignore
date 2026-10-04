@@ -3,3 +3,6 @@
 __pycache__/
 *.pyc
 .claude/
+
+# Fotos von Nährwerttabellen (Rohmaterial, 30+ MB) — Werte stehen in health/seed_foods_packungen.sql
+Nährwerttabellen/
